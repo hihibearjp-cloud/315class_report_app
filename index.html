@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>315 學生班級成績通知系統</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- 載入 Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- 載入 SheetJS (Excel 解析必備) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #F6F4EE;
+        }
+        /* 列印專用 CSS */
+        @media print {
+            body {
+                background-color: #FFFFFF !important;
+                font-size: 11pt;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-page {
+                page-break-after: always;
+                box-shadow: none !important;
+                border: none !important;
+                margin: 0 !important;
+                padding: 1.2cm !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                height: auto !important;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col">
+    <div id="root"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCBWQlxFEjio3mE5TSl5X6Ng_c1drXwCf0",
+            authDomain: "class-report-3191c.firebaseapp.com",
+            projectId: "class-report-3191c",
+            storageBucket: "class-report-3191c.firebasestorage.app",
+            messagingSenderId: "1077190697392",
+            appId: "1:1077190697392:web:ca99c2cfdc157cdf393675",
+            measurementId: "G-PMEH4L01SR"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        window.firebaseAPI = {
+            db, auth, signInAnonymously, onAuthStateChanged, collection, doc, setDoc, onSnapshot
+        };
+        window.dispatchEvent(new Event('firebase-ready'));
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function App() {
+            const [firebaseReady, setFirebaseReady] = useState(!!window.firebaseAPI);
+            const [firebaseUser, setFirebaseUser] = useState(null);
+            
+            // 系統模式與頁面
+            const [viewMode, setViewMode] = useState('parent-login'); // 'parent-login', 'parent-dashboard', 'teacher-dashboard'
+            const [currentStudent, setCurrentStudent] = useState(null);
+            const [students, setStudents] = useState([]);
+            
+            // 系統設定 (全面改為以科目範圍與日期為核心)
+            const [settings, setSettings] = useState({
+                className: "三年一班",
+                gradingTone: "溫和鼓勵", // '溫和鼓勵', '積極督促', '嚴格警示'
+                printRemark: "請家長與學生一同審視本次段考各科目範圍的熟練度，並持續配合在家複習。",
+                showTotalAvg: true,
+                showGradeLevel: true,
+                showClassAvg: true,
+                showProgress: true,
+                enableComments: true,
+                subjects: [
+                    { name: "國文", date: "2026/07/05", scope: "第1章到第4章", locked: false },
+                    { name: "英語", date: "2026/07/05", scope: "L1-L3 單字句型", locked: false },
+                    { name: "數學", date: "2026/07/05", scope: "1-1 到 2-2 基礎運算", locked: false },
+                    { name: "理化", date: "2026/07/05", scope: "溫度與熱、光學現象", locked: false },
+                    { name: "歷史", date: "2026/07/05", scope: "第一單元 早期台灣", locked: false },
+                    { name: "地理", date: "2026/07/05", scope: "台灣地形與氣候類型", locked: false },
+                    { name: "公民", date: "2026/07/05", scope: "單元一 社會中的互動", locked: false },
+                    { name: "生物", date: "2026/07/05", scope: "第一章 細胞的構造與生理", locked: false }
+                ]
+            });
+
+            // 登入表單與狀態
+            const [loginData, setLoginData] = useState({ seatNo: '', password: '' });
+            const [teacherPass, setTeacherPass] = useState('');
+            const [showTeacherLogin, setShowTeacherLogin] = useState(false);
+            
+            // 單一分數自主填寫成績
+            const [editingSubject, setEditingSubject] = useState(null);
+            const [editForm, setEditForm] = useState({ score: '' });
+            
+            // 教師端編輯與手動新增學生的狀態
+            const [modifyingStudent, setModifyingStudent] = useState(null);
+            const [showAddStudent, setShowAddStudent] = useState(false);
+            const [newStudentData, setNewStudentData] = useState({ seatNo: '', name: '', password: '' });
+
+            // 考科範圍編輯狀態
+            const [newSubjectName, setNewSubjectName] = useState('');
+            const [newSubjectScope, setNewSubjectScope] = useState('');
+            const [newSubjectDate, setNewSubjectDate] = useState('');
+
+            // UI 狀態控制
+            const [toast, setToast] = useState(null);
+            const [excelDragActive, setExcelDragActive] = useState(false);
+            const fileInputRef = useRef(null);
+
+            const appId = 'class-report-3191c';
+
+            useEffect(() => {
+                if (!firebaseReady) {
+                    const handleReady = () => setFirebaseReady(true);
+                    window.addEventListener('firebase-ready', handleReady);
+                    return () => window.removeEventListener('firebase-ready', handleReady);
+                }
+            }, [firebaseReady]);
+
+            useEffect(() => {
+                if (!firebaseReady) return;
+                const { auth, signInAnonymously, onAuthStateChanged } = window.firebaseAPI;
+                signInAnonymously(auth).catch(err => console.error("驗證失敗:", err));
+                const unsubscribe = onAuthStateChanged(auth, setFirebaseUser);
+                return () => unsubscribe();
+            }, [firebaseReady]);
+
+            useEffect(() => {
+                if (!firebaseReady || !firebaseUser) return;
+                const { db, collection, doc, onSnapshot } = window.firebaseAPI;
+
+                // 監聽並正規化設定檔
+                const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
+                const unsubSettings = onSnapshot(settingsRef, (snap) => {
+                    if (snap.exists()) {
+                        const cloudData = snap.data();
+                        let rawSubjects = cloudData.subjects || [];
+                        const normalizedSubjects = rawSubjects.map(sub => {
+                            if (typeof sub === 'string') {
+                                return {
+                                    name: sub,
+                                    date: "2026/07/05",
+                                    scope: "未設定範圍",
+                                    locked: false
+                                };
+                            }
+                            return {
+                                name: sub.name || "",
+                                date: sub.date || "2026/07/05",
+                                scope: sub.scope || "未設定範圍",
+                                locked: sub.locked || false
+                            };
+                        });
+
+                        setSettings({
+                            ...cloudData,
+                            subjects: normalizedSubjects
+                        });
+                    }
+                });
+
+                // 監聽學生成績列表
+                const studentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
+                const unsubStudents = onSnapshot(studentsRef, (snap) => {
+                    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    list.sort((a, b) => {
+                        const seatA = String(a.seatNo || '');
+                        const seatB = String(b.seatNo || '');
+                        return seatA.localeCompare(seatB, undefined, {numeric: true});
+                    });
+                    setStudents(list);
+
+                    // 保持當前檢視學生資訊最新
+                    if (currentStudent) {
+                        const updated = list.find(s => s.id === currentStudent.id);
+                        if (updated) setCurrentStudent(updated);
+                    }
+                });
+
+                return () => {
+                    unsubSettings();
+                    unsubStudents();
+                };
+            }, [firebaseReady, firebaseUser, currentStudent?.id]);
+
+            const showToast = (text, type = 'success') => {
+                setToast({ text, type });
+                setTimeout(() => setToast(null), 3000);
+            };
+
+            const saveSettingsToCloud = async (newSettings) => {
+                if (!firebaseReady) return;
+                try {
+                    const { db, doc, setDoc } = window.firebaseAPI;
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), newSettings);
+                    showToast("教師端設定已同步儲存！");
+                } catch (e) {
+                    showToast("同步失敗：" + e.message, "error");
+                }
+            };
+
+            const getStudentScore = (student, subName) => {
+                if (!student?.scores) return null;
+                const s = student.scores[subName];
+                if (s === undefined || s === null) return null;
+                if (typeof s === 'number') return s;
+                if (typeof s === 'string') return parseFloat(s) || null;
+                if (typeof s === 'object') {
+                    if (s.score !== undefined && s.score !== '') return parseFloat(s.score);
+                    // 舊版格式自動平均降級適配
+                    if (s.regular !== undefined && s.exam !== undefined) {
+                        return (parseFloat(s.regular) + parseFloat(s.exam)) / 2;
+                    }
+                    if (s.regular !== undefined) return parseFloat(s.regular);
+                    return null;
+                }
+                return null;
+            };
+
+            const getLocalDiagnostic = (student, subName, score, classAvg, tone) => {
+                if (score === null || score === undefined) return "尚未登記該科成績。";
+                const diff = score - classAvg;
+                
+                if (tone === "溫和鼓勵") {
+                    if (score >= 90) return `${subName}表現優異，觀念通透，建議繼續保持良好手感！`;
+                    if (score >= 80) return `${subName}實力良好，多一份細心與沉著就能再次突破分水嶺。`;
+                    if (score >= 60) return `${subName}基本分已掌握，針對錯題加強反思即可穩定進步。`;
+                    return `${subName}稍嫌吃力，建議每天針對基礎概念花 15 分鐘重新釐清。`;
+                } else if (tone === "積極督促") {
+                    if (score >= 90) return `${subName}成績頂尖但不能自滿，應開始挑戰進階思維題型。`;
+                    if (score >= 80) return `${subName}觀念大致理解惟細緻度不夠，請確實落實錯題訂正。`;
+                    if (score >= 60) return `${subName}成績中游，需更積極主動，落實複習以防成績下滑。`;
+                    return `${subName}落後偏多，務必制定每日基本概念練習計畫，重打基礎。`;
+                } else { // 嚴格警示
+                    if (score >= 90) return `${subName}維持高分，請精益求精，嚴防任何非受迫性粗心失誤。`;
+                    if (score >= 80) return `${subName}中上程度，但考卷中粗心失分偏多，須提升作答專注度。`;
+                    if (score >= 60) return `${subName}在及格邊緣，表示核心觀念一知半解，務必及時補強。`;
+                    return `${subName}成績已亮紅燈！表示學習嚴重落後，請立即進行個別輔導。`;
+                }
+            };
+
+            const loadDemoData = async () => {
+                if (!firebaseReady) return;
+                const demoList = [
+                    {
+                        id: "A001", seatNo: "A001", name: "王小明", password: "A001", progress: 3.5,
+                        scores: { "國文": 85, "英語": 78, "數學": 92, "理化": 86, "歷史": 90, "地理": 82, "公民": 88, "生物": 94 }
+                    },
+                    {
+                        id: "A002", seatNo: "A002", name: "陳美玲", password: "A002", progress: 1.0,
+                        scores: { "國文": 78, "英語": 84, "數學": 91, "理化": 88, "歷史": 80, "地理": 85, "公民": 82, "生物": 89 }
+                    },
+                    {
+                        id: "A003", seatNo: "A003", name: "林志宏", password: "A003", progress: -2.0,
+                        scores: { "國文": 65, "英語": 72, "數學": 80, "理化": 84, "歷史": 68, "地理": 70, "公民": 74, "生物": 72 }
+                    }
+                ];
+
+                try {
+                    const { db, doc, setDoc } = window.firebaseAPI;
+                    for (const s of demoList) {
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), s);
+                    }
+                    showToast("已載入展示範例名單與各科成績！");
+                } catch (e) {
+                    showToast("載入範例失敗：" + e.message, "error");
+                }
+            };
+
+            const clearDatabase = async () => {
+                if (!window.confirm("警告：這將會清除雲端的所有學生成績資料，確定清除嗎？")) return;
+                try {
+                    const { db, doc, setDoc } = window.firebaseAPI;
+                    for (const s of students) {
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), {});
+                    }
+                    showToast("資料庫已清空！");
+                } catch (e) {
+                    showToast("清空失敗：" + e.message, "error");
+                }
+            };
+
+            const handleExcelUpload = (file) => {
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const sheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[sheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet);
+
+                        if (json.length === 0) {
+                            showToast("Excel 中沒有找到任何有效數據！", "error");
+                            return;
+                        }
+
+                        const parsedStudents = json.map((row, idx) => {
+                            const seat = String(row['座號'] || `A${String(idx+1).padStart(3, '0')}`);
+                            
+                            const studentScores = {};
+                            settings.subjects.forEach(sub => {
+                                const subName = sub.name;
+                                if (row[subName] !== undefined) {
+                                    studentScores[subName] = parseFloat(row[subName]) || 0;
+                                } else {
+                                    const regKey = `${subName}_平時`;
+                                    const exKey = `${subName}_定期`;
+                                    if (row[regKey] !== undefined || row[exKey] !== undefined) {
+                                        const reg = parseFloat(row[regKey]) || 0;
+                                        const ex = parseFloat(row[exKey]) || 0;
+                                        studentScores[subName] = (reg + ex) / 2;
+                                    } else {
+                                        studentScores[subName] = 0;
+                                    }
+                                }
+                            });
+
+                            return {
+                                id: `student_${seat}`,
+                                seatNo: seat,
+                                name: String(row['姓名'] || `同學 ${idx+1}`),
+                                password: String(row['密碼'] || seat), 
+                                progress: parseFloat(row['進步分數']) || 0,
+                                scores: studentScores
+                            };
+                        });
+
+                        const { db, doc, setDoc } = window.firebaseAPI;
+                        for (const s of parsedStudents) {
+                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), s);
+                        }
+                        showToast(`成功讀取並匯入 ${parsedStudents.length} 筆學生成績！`);
+                    } catch (err) {
+                        showToast("解析失敗：" + err.message, "error");
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            };
+
+            const onDragOver = (e) => { e.preventDefault(); setExcelDragActive(true); };
+            const onDragLeave = () => setExcelDragActive(false);
+            const onDrop = (e) => {
+                e.preventDefault();
+                setExcelDragActive(false);
+                handleExcelUpload(e.dataTransfer.files[0]);
+            };
+
+            const getGradeLevelStats = () => {
+                const stats = { A: 0, B: 0, C: 0, D: 0, E: 0, avg: 0 };
+                if (students.length === 0) return stats;
+
+                let totalSum = 0;
+                students.forEach(s => {
+                    const avg = calculateStudentAvg(s);
+                    totalSum += avg;
+                    if (avg >= 90) stats.A++;
+                    else if (avg >= 80) stats.B++;
+                    else if (avg >= 70) stats.C++;
+                    else if (avg >= 60) stats.D++;
+                    else stats.E++;
+                });
+                stats.avg = totalSum / students.length;
+                return stats;
+            };
+
+            const calculateStudentAvg = (student) => {
+                if (!student?.scores || settings.subjects.length === 0) return 0;
+                let sum = 0;
+                let validCount = 0;
+                settings.subjects.forEach(sub => {
+                    const val = getStudentScore(student, sub.name);
+                    if (val !== null) {
+                        sum += val;
+                        validCount++;
+                    }
+                });
+                return validCount > 0 ? sum / validCount : 0;
+            };
+
+            const calculateClassSubjectAvg = (subjectName) => {
+                if (students.length === 0) return 0;
+                let sum = 0;
+                let count = 0;
+                students.forEach(s => {
+                    const val = getStudentScore(s, subjectName);
+                    if (val !== null) {
+                        sum += val;
+                        count++;
+                    }
+                });
+                return count > 0 ? sum / count : 0;
+            };
+
+            const getGradeLevelName = (avg) => {
+                if (avg >= 90) return "A級距 (90-100)";
+                if (avg >= 80) return "B級距 (80-89)";
+                if (avg >= 70) return "C級距 (70-79)";
+                if (avg >= 60) return "D級距 (60-69)";
+                return "E級距 (60分以下)";
+            };
+
+            const handleParentLogin = () => {
+                const seatStr = String(loginData.seatNo).trim();
+                const pwdStr = String(loginData.password).trim();
+                const found = students.find(s => String(s.seatNo).trim() === seatStr && String(s.password).trim() === pwdStr);
+                if (found) {
+                    setCurrentStudent(found);
+                    setViewMode('parent-dashboard');
+                    showToast(`登入成功！歡迎 ${found.name} 同學與家長！`);
+                } else {
+                    showToast("座號或密碼輸入錯誤！", "error");
+                }
+            };
+
+            const handleTeacherLogin = () => {
+                if (teacherPass === "fxm315") {
+                    setViewMode('teacher-dashboard');
+                    setShowTeacherLogin(false);
+                    showToast("教師管理後台登入成功！");
+                } else {
+                    showToast("管理員密碼錯誤！", "error");
+                }
+            };
+
+            const startEditSubjectScore = (subjectName) => {
+                const matchedSubject = settings.subjects.find(s => s.name === subjectName);
+                if (matchedSubject?.locked) {
+                    showToast("此科目已被導師鎖定，暫時無法自行變更！", "error");
+                    return;
+                }
+                setEditingSubject(subjectName);
+                const currentScore = getStudentScore(currentStudent, subjectName);
+                setEditForm({
+                    score: currentScore !== null ? currentScore.toString() : ''
+                });
+            };
+
+            const saveStudentScore = async () => {
+                if (!firebaseReady || !currentStudent) return;
+                const scoreNum = parseFloat(editForm.score);
+
+                if (isNaN(scoreNum) || scoreNum < 0 || scoreNum > 100) {
+                    showToast("請輸入 0 ~ 100 之間的合理成績分值！", "error");
+                    return;
+                }
+
+                try {
+                    const { db, doc, setDoc } = window.firebaseAPI;
+                    const updatedScores = {
+                        ...currentStudent.scores,
+                        [editingSubject]: scoreNum
+                    };
+                    const updatedStudent = {
+                        ...currentStudent,
+                        scores: updatedScores
+                    };
+
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', currentStudent.id), updatedStudent);
+                    setCurrentStudent(updatedStudent);
+                    setEditingSubject(null);
+                    showToast(`${editingSubject} 成績已同步至雲端系統！`);
+                } catch (e) {
+                    showToast("儲存失敗：" + e.message, "error");
+                }
+            };
+
+            const handleAddStudent = async () => {
+                const seat = String(newStudentData.seatNo).trim();
+                const name = String(newStudentData.name).trim();
+                const pwd = String(newStudentData.password).trim() || seat;
+
+                if (!seat || !name) {
+                    showToast("請填寫座號與學生姓名！", "error");
+                    return;
+                }
+                if (students.some(s => String(s.seatNo).trim() === seat)) {
+                    showToast("此座號已重複！請確認座號設定。", "error");
+                    return;
+                }
+
+                try {
+                    const { db, doc, setDoc } = window.firebaseAPI;
+                    const newId = `student_${seat}`;
+                    const studentObj = {
+                        id: newId,
+                        seatNo: seat,
+                        name: name,
+                        password: pwd,
+                        progress: 0,
+                        scores: {}
+                    };
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', newId), studentObj);
+                    setNewStudentData({ seatNo: '', name: '', password: '' });
+                    setShowAddStudent(false);
+                    showToast(`學生 [${name}] 新增成功！`);
+                } catch (e) {
+                    showToast("手動新增失敗：" + e.message, "error");
+                }
+            };
+
+            const handleAddSubject = () => {
+                const name = newSubjectName.trim();
+                const scope = newSubjectScope.trim() || "未設定範圍";
+                const date = newSubjectDate.trim() || "2026/07/05";
+
+                if (!name) {
+                    showToast("請輸入科目名稱！", "error");
+                    return;
+                }
+                if (settings.subjects.some(s => s.name === name)) {
+                    showToast("此科目名稱已存在！", "error");
+                    return;
+                }
+                const newSubObj = { name, date, scope, locked: false };
+                const updatedSubjects = [...settings.subjects, newSubObj];
+                const newSettings = { ...settings, subjects: updatedSubjects };
+                
+                setSettings(newSettings);
+                saveSettingsToCloud(newSettings);
+                setNewSubjectName('');
+                setNewSubjectScope('');
+                setNewSubjectDate('');
+                showToast(`已成功新增考科：${name}`);
+            };
+
+            const handleDeleteSubject = (subjectName) => {
+                if (!window.confirm(`確定要刪除「${subjectName}」科目嗎？此操作不可逆。`)) return;
+                const updatedSubjects = settings.subjects.filter(s => s.name !== subjectName);
+                const newSettings = { ...settings, subjects: updatedSubjects };
+                
+                setSettings(newSettings);
+                saveSettingsToCloud(newSettings);
+                showToast(`已刪除科目：${subjectName}`);
+            };
+
+            const openModifyStudentModal = (student) => {
+                setModifyingStudent(JSON.parse(JSON.stringify(student)));
+            };
+
+            const saveModifiedStudent = async () => {
+                if (!firebaseReady || !modifyingStudent) return;
+                if (!modifyingStudent.name.trim()) {
+                    showToast("學生姓名不能為空！", "error");
+                    return;
+                }
+
+                try {
+                    const { db, doc, setDoc } = window.firebaseAPI;
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', modifyingStudent.id), modifyingStudent);
+                    setModifyingStudent(null);
+                    showToast(`同學 [${modifyingStudent.name}] 資訊已安全儲存！`);
+                } catch (e) {
+                    showToast("儲存失敗：" + e.message, "error");
+                }
+            };
+
+            const exportGradesToCSV = () => {
+                if (students.length === 0) {
+                    showToast("目前沒有學生資料可以匯出！", "error");
+                    return;
+                }
+                
+                let csvContent = "\uFEFF";
+                let headers = "座號,姓名,密碼,進步分數";
+                settings.subjects.forEach(sub => {
+                    headers += `,${sub.name}`;
+                });
+                headers += ",總平均\r\n";
+                csvContent += headers;
+
+                students.forEach(s => {
+                    let row = `${s.seatNo},"${s.name}","${s.password || ''}",${s.progress || 0}`;
+                    settings.subjects.forEach(sub => {
+                        const val = getStudentScore(s, sub.name);
+                        row += `,${val !== null ? val : ""}`;
+                    });
+                    row += `,${calculateStudentAvg(s).toFixed(2)}\r\n`;
+                    csvContent += row;
+                });
+
+                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.setAttribute("download", `${settings.className}_學科成績單彙整.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast("成績彙整總表匯出成功！");
+            };
+
+            const downloadTemplateCSV = () => {
+                let csvContent = "\uFEFF";
+                let headers = "座號,姓名,密碼,進步分數";
+                settings.subjects.forEach(sub => {
+                    headers += `,${sub.name}`;
+                });
+                headers += "\r\n";
+                csvContent += headers;
+                
+                csvContent += "A001,王小明,A001,3.5";
+                settings.subjects.forEach(() => {
+                    csvContent += ",85";
+                });
+                csvContent += "\r\n";
+
+                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.setAttribute("download", "雙向單一成績通知匯入範本.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            const renderRadarChart = (student) => {
+                const subjectsList = settings.subjects;
+                if (subjectsList.length < 3) {
+                    return (
+                        <div className="py-12 text-slate-400 text-xs flex flex-col items-center justify-center gap-1">
+                          <span>📊 考科不足 3 科</span>
+                          <span>無法繪製雷達分佈圖</span>
+                        </div>
+                    );
+                }
+
+                const size = 200;
+                const center = size / 2;
+                const maxRadius = 75;
+                const N = subjectsList.length;
+
+                const getCoords = (index, value) => {
+                    const angle = (Math.PI * 2 / N) * index - Math.PI / 2;
+                    const r = (value / 100) * maxRadius;
+                    return {
+                        x: center + r * Math.cos(angle),
+                        y: center + r * Math.sin(angle)
+                    };
+                };
+
+                const gridLevels = [20, 40, 60, 80, 100];
+                const gridPolygons = gridLevels.map(level => {
+                    return subjectsList.map((_, i) => {
+                        const { x, y } = getCoords(i, level);
+                        return `${x},${y}`;
+                    }).join(" ");
+                });
+
+                const studentPoints = subjectsList.map((sub, i) => {
+                    const score = getStudentScore(student, sub.name) || 0;
+                    const { x, y } = getCoords(i, score);
+                    return `${x},${y}`;
+                }).join(" ");
+
+                return (
+                    <svg width="220" height="220" className="mx-auto my-2">
+                        {gridPolygons.map((pts, idx) => (
+                            <polygon key={idx} points={pts} fill="none" stroke="#E2E8F0" strokeWidth="1" />
+                        ))}
+                        {subjectsList.map((_, i) => {
+                            const outer = getCoords(i, 100);
+                            return <line key={i} x1={center} y1={center} x2={outer.x} y2={outer.y} stroke="#E2E8F0" strokeWidth="1" />;
+                        })}
+                        <polygon points={studentPoints} fill="rgba(0, 112, 74, 0.2)" stroke="#00704A" strokeWidth="2" />
+                        {subjectsList.map((sub, i) => {
+                            const score = getStudentScore(student, sub.name) || 0;
+                            const p = getCoords(i, score);
+                            return <circle key={i} cx={p.x} cy={p.y} r="3.5" fill="#00704A" />;
+                        })}
+                        {subjectsList.map((sub, i) => {
+                            const labelPos = getCoords(i, 118);
+                            return (
+                                <text 
+                                    key={i} 
+                                    x={labelPos.x} 
+                                    y={labelPos.y + 4} 
+                                    textAnchor="middle" 
+                                    className="text-[10px] font-bold fill-slate-600"
+                                >
+                                    {sub.name}
+                                </text>
+                            );
+                        })}
+                    </svg>
+                );
+            };
+
+            const stats = getGradeLevelStats();
+
+            return (
+                <div className="flex-grow flex flex-col">
+                    {/* 飄浮 Toast 通知 */}
+                    {toast && (
+                        <div className={`fixed top-5 right-5 z-50 px-5 py-3 rounded-2xl shadow-2xl text-white font-medium flex items-center gap-2 transform transition-all duration-300 ${toast.type === 'error' ? 'bg-rose-500' : 'bg-emerald-500'}`}>
+                            {toast.type === 'error' ? '⚠️' : '✅'} {toast.text}
+                        </div>
+                    )}
+
+                    {/* 教師 & 家長導覽列 */}
+                    <nav className="no-print bg-[#1E3932] text-[#F3EFE0] px-6 py-4 shadow-xl flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-[#00704A] flex items-center justify-center font-black text-white text-xl">315</div>
+                            <div>
+                                <h1 className="text-lg font-bold tracking-wider">315 成績查詢系統</h1>
+                                <p className="text-[10px] text-slate-300">簡潔考科範圍與即時智慧學術診斷</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            {viewMode === 'teacher-dashboard' ? (
+                                <button onClick={() => setViewMode('parent-login')} className="bg-slate-700/60 hover:bg-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition">
+                                    🚪 退出教師端
+                                </button>
+                            ) : (
+                                <button onClick={() => { setViewMode('teacher-dashboard'); }} className="bg-[#00704A] hover:bg-[#005a3c] px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1">
+                                    🔑 進入教師管理端
+                                </button>
+                            )}
+                        </div>
+                    </nav>
+
+                    {/* ================================== 頁面一：家長登入頁 ================================== */}
+                    {viewMode === 'parent-login' && (
+                        <main className="no-print flex-grow flex flex-col justify-center items-center px-4 py-12">
+                          {/* ... 登入頁面內容保持原有不變 ... */}
+                            <div className="w-full max-w-xl text-center mb-8">
+                                <div className="inline-block bg-emerald-100 text-emerald-800 font-bold px-4 py-1.5 rounded-full text-xs mb-3 shadow-inner">
+                                    班級經營與智慧診斷工具 ♥ 315專屬
+                                </div>
+                                <h2 className="text-4xl font-extrabold text-[#1E3932] tracking-wide mb-2">315 班級成績通知單查詢系統</h2>
+                                <p className="text-slate-500 text-sm">輸入學生的「座號」與「專屬密碼」，即可在線上即時查看、自主登記範圍成績，並獲取專家級智慧學科診斷！</p>
+                            </div>
+
+                            <div className="bg-white p-8 rounded-[2rem] shadow-2xl border border-slate-100 max-w-md w-full relative overflow-hidden">
+                                <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#00704A] to-[#CBA258]"></div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+                                    <span className="p-1.5 bg-green-50 text-[#00704A] rounded-lg">🔐</span> 學生與家長登入通道
+                                </h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">座號 (範例：A001 或 A002)</label>
+                                        <input 
+                                            type="text" 
+                                            placeholder="請輸入座號" 
+                                            className="w-full p-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00704A]"
+                                            value={loginData.seatNo} 
+                                            onChange={e => setLoginData({...loginData, seatNo: e.target.value})}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">查詢密碼 (預設同座號)</label>
+                                        <input 
+                                            type="password" 
+                                            placeholder="請輸入密碼" 
+                                            className="w-full p-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00704A]"
+                                            value={loginData.password} 
+                                            onChange={e => setLoginData({...loginData, password: e.target.value})}
+                                        />
+                                    </div>
+                                    <button onClick={handleParentLogin} className="w-full bg-[#00704A] hover:bg-[#005a3c] text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-green-900/10 active:scale-95">
+                                        🚀 登入查看與自行登記成績
+                                    </button>
+                                </div>
+                            </div>
+                        </main>
+                    )}
+
+                    {/* ================================== 頁面二：家長儀表板 / 成績單 ================================== */}
+                    {viewMode === 'parent-dashboard' && currentStudent && (
+                        <main className="flex-grow p-6 flex flex-col items-center animate-fade-in">
+                            <div className="no-print w-full max-w-4xl flex flex-wrap justify-between gap-3 mb-4">
+                                <button onClick={() => { setViewMode('parent-login'); setEditingSubject(null); }} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1">
+                                    ← 返回登入頁面
+                                </button>
+                                <button onClick={() => window.print()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-md">
+                                    🖨️ 直接列印我的成績通知單
+                                </button>
+                            </div>
+
+                            {/* 成績通知單卡片 (A4列印相容規格) */}
+                            <div className="print-page bg-white p-8 sm:p-12 rounded-[2.5rem] border border-slate-100 shadow-2xl max-w-4xl w-full flex flex-col md:flex-row gap-8 relative">
+                                <div className="absolute top-0 right-0 p-8 opacity-5 text-[#00704A] pointer-events-none">
+                                    <span className="text-8xl font-black">{settings.className}</span>
+                                </div>
+
+                                {/* 左半部：基本資料、各科表格與雷達圖 */}
+                                <div className="flex-1 flex flex-col gap-5">
+                                    <div className="border-b-2 border-slate-100 pb-4">
+                                        <h2 className="text-2xl font-black text-slate-800 mt-1">
+                                            {currentStudent.name} <span className="text-sm font-medium text-slate-500">的成績通知單</span>
+                                        </h2>
+                                        <p className="text-[10px] text-slate-400 mt-0.5">班級：{settings.className}</p>
+                                    </div>
+
+                                    {/* 雷達圖區域 */}
+                                    <div className="bg-slate-50/50 p-4 rounded-3xl border border-slate-100 text-center">
+                                        <span className="text-xs font-bold text-[#00704A] bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">各科雷達分佈圖</span>
+                                        {renderRadarChart(currentStudent)}
+                                    </div>
+
+                                    {/* 學科細部分數與範圍表格 */}
+                                    <div className="overflow-hidden border border-slate-200 rounded-2xl shadow-sm">
+                                        <table className="min-w-full divide-y divide-slate-200 text-center text-xs">
+                                            <thead className="bg-[#1E3932] text-white">
+                                                <tr>
+                                                    <th scope="col" className="px-3 py-2.5 text-left font-bold pl-4">科目</th>
+                                                    <th scope="col" className="px-3 py-2.5 text-left font-bold">考試範圍</th>
+                                                    <th scope="col" className="px-3 py-2.5 font-bold">日期</th>
+                                                    <th scope="col" className="px-3 py-2.5 font-bold">成績</th>
+                                                    {settings.showClassAvg && <th scope="col" className="px-3 py-2.5 font-bold">班平均</th>}
+                                                    <th scope="col" className="px-3 py-2.5 font-bold no-print">登記</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-slate-100 font-medium">
+                                                {settings.subjects.map((sub, idx) => {
+                                                    const subName = sub.name;
+                                                    const score = getStudentScore(currentStudent, subName);
+                                                    const isLocked = sub.locked || false;
+                                                    const classAvg = calculateClassSubjectAvg(subName);
+                                                    const isBelowAvg = score !== null && classAvg > 0 && score < classAvg;
+                                                    
+                                                    return (
+                                                        <tr key={idx} className="hover:bg-slate-50">
+                                                            <td className="px-3 py-2.5 text-left font-bold text-slate-800 pl-4">{subName}</td>
+                                                            <td className="px-3 py-2.5 text-left text-slate-500 font-normal max-w-[140px] truncate" title={sub.scope}>{sub.scope}</td>
+                                                            <td className="px-3 py-2.5 text-slate-400 text-[10px] whitespace-nowrap">{sub.date}</td>
+                                                            <td className={`px-3 py-2.5 font-bold text-sm ${isBelowAvg ? 'text-rose-600 font-black' : 'text-[#00704A]'}`}>
+                                                                {score !== null ? (
+                                                                    <span className="flex items-center justify-center gap-0.5">
+                                                                        {score.toFixed(1)}
+                                                                        {isBelowAvg && <span className="text-[10px] text-rose-500 font-bold" title="低於班平均">⚠️</span>}
+                                                                    </span>
+                                                                ) : "-"}
+                                                            </td>
+                                                            {settings.showClassAvg && (
+                                                                <td className="px-3 py-2.5 text-slate-400 font-semibold">
+                                                                    {classAvg > 0 ? classAvg.toFixed(1) : "-"}
+                                                                </td>
+                                                            )}
+                                                            <td className="px-3 py-2.5 no-print">
+                                                                {isLocked ? (
+                                                                    <span className="text-slate-400 text-[9px] bg-slate-100 px-1 py-0.5 rounded flex items-center justify-center gap-1 mx-auto max-w-[45px]">
+                                                                        🔒
+                                                                    </span>
+                                                                ) : (
+                                                                    <button 
+                                                                        onClick={() => startEditSubjectScore(subName)} 
+                                                                        className="bg-emerald-50 text-[#00704A] hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded text-[9px] font-bold mx-auto"
+                                                                    >
+                                                                        🖊️ 登記
+                                                                    </button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                {settings.showTotalAvg && (
+                                                    <tr className="bg-emerald-50/50 font-bold">
+                                                        <td className="px-3 py-3 text-left pl-4 text-[#00704A]">總平均</td>
+                                                        <td colSpan="2" className="text-right text-slate-400">學科估算：</td>
+                                                        <td className="px-3 py-3 text-[#00704A] text-sm font-black">{calculateStudentAvg(currentStudent).toFixed(1)}</td>
+                                                        {settings.showClassAvg && <td className="px-3 py-3 text-indigo-600 text-[10px] font-bold">班平均: {stats.avg.toFixed(1)}</td>}
+                                                        <td className="px-3 py-3 no-print"></td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-3 text-center">
+                                        {settings.showGradeLevel && (
+                                            <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl">
+                                                <span className="block text-[10px] text-slate-400 font-bold">目前所屬級距</span>
+                                                <span className="block text-sm font-black text-slate-800 mt-0.5">
+                                                    {getGradeLevelName(calculateStudentAvg(currentStudent))}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {settings.showProgress && (
+                                            <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl">
+                                                <span className="block text-[10px] text-slate-400 font-bold">進步分數</span>
+                                                <span className={`block text-sm font-black mt-0.5 ${currentStudent.progress >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                    {currentStudent.progress >= 0 ? `+${currentStudent.progress}` : `${currentStudent.progress}`} 分
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* 右半部：個人學習診斷（言簡意賅）與導師叮嚀 */}
+                                <div className="flex-1 flex flex-col gap-5 justify-between">
+                                    <div className="flex flex-col gap-4">
+                                        {editingSubject ? (
+                                            <div className="no-print bg-emerald-50/60 border border-emerald-200/80 p-5 rounded-3xl flex flex-col gap-4 animate-fade-in shadow-inner">
+                                                <div className="flex justify-between items-center pb-2 border-b border-emerald-200">
+                                                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                                                        <span>🖊️</span> 線上登記【{editingSubject}】成績
+                                                    </h3>
+                                                    <button onClick={() => setEditingSubject(null)} className="text-slate-400 hover:text-slate-600 text-xs">
+                                                        取消
+                                                    </button>
+                                                </div>
+                                                <div className="flex flex-col gap-2">
+                                                    <label className="block text-xs font-bold text-slate-500 mb-1">本次成績 (0-100)</label>
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        max="100" 
+                                                        placeholder="請輸入分數" 
+                                                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-center text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#00704A]"
+                                                        value={editForm.score} 
+                                                        onChange={e => setEditForm({ score: e.target.value })}
+                                                    />
+                                                </div>
+                                                <button onClick={saveStudentScore} className="w-full bg-[#00704A] hover:bg-[#005a3c] text-white py-2.5 rounded-xl text-xs font-bold transition shadow-md active:scale-95">
+                                                    💾 儲存並同步到雲端
+                                                </button>
+                                            </div>
+                                        ) : null}
+
+                                        <div className="border-b-2 border-slate-100 pb-3 flex justify-between items-center">
+                                            <h3 className="font-black text-slate-800 text-base flex items-center gap-1.5">
+                                                <span>📊</span> 
+                                                <span>即時科目學習診斷 (30-50字)</span>
+                                            </h3>
+                                            <span className="text-[10px] bg-emerald-50 text-[#00704A] border border-emerald-100 font-bold px-2 py-0.5 rounded-full">
+                                                語氣：{settings.gradingTone}
+                                            </span>
+                                        </div>
+
+                                        {settings.enableComments ? (
+                                            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                                                {settings.subjects.map((sub, idx) => {
+                                                    const subName = sub.name;
+                                                    const score = getStudentScore(currentStudent, subName);
+                                                    const classAvg = calculateClassSubjectAvg(subName);
+                                                    const comment = getLocalDiagnostic(currentStudent, subName, score, classAvg, settings.gradingTone);
+
+                                                    return (
+                                                        <div key={idx} className="p-3.5 rounded-xl border border-stone-200/60 bg-stone-50 transition-all duration-300">
+                                                            <div className="flex justify-between items-center mb-1">
+                                                                <span className="font-bold text-[#1E3932] text-xs">【{subName}】</span>
+                                                                <span className="text-[9px] bg-emerald-100 text-[#00704A] px-1.5 py-0.5 rounded font-bold tracking-wider">即時診斷</span>
+                                                            </div>
+                                                            <p className="text-slate-600 leading-relaxed text-xs font-normal">
+                                                                {comment}
+                                                            </p>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-12 text-slate-400 text-xs">導師未啟用學科自動評語。</div>
+                                        )}
+                                    </div>
+
+                                    <div className="p-4 bg-amber-50 border border-amber-100 rounded-3xl mt-4">
+                                        <h5 className="text-[10px] uppercase font-bold text-amber-800 tracking-wider mb-1">導師特別叮嚀</h5>
+                                        <p className="text-xs text-amber-900 leading-relaxed font-medium">{settings.printRemark}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </main>
+                    )}
+
+                    {/* ================================== 頁面三：教師管理後台 ================================== */}
+                    {viewMode === 'teacher-dashboard' && (
+                        <main className="no-print flex-grow p-6 flex flex-col xl:flex-row gap-6 max-w-[1600px] w-full mx-auto animate-fade-in">
+                            
+                            {/* 左欄設定面板 */}
+                            <div className="w-full xl:w-96 shrink-0 flex flex-col gap-5">
+                                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl flex flex-col gap-4">
+                                    <h3 className="font-black text-slate-800 text-lg pb-3 border-b flex items-center gap-2">
+                                        <span>⚙️</span> 教師設定中心
+                                    </h3>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">班級名稱</label>
+                                            <input type="text" className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm" value={settings.className} onChange={e => { const s = {...settings, className: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">診斷語氣</label>
+                                            <select className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm font-bold" value={settings.gradingTone} onChange={e => { const s = {...settings, gradingTone: e.target.value}; setSettings(s); saveSettingsToCloud(s); }}>
+                                                <option value="溫和鼓勵">溫和鼓勵 🌸</option>
+                                                <option value="積極督促">積極督促 ⚡</option>
+                                                <option value="嚴格警示">嚴格警示 🔥</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">列印總備註內容</label>
+                                        <textarea rows="3" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs" value={settings.printRemark} onChange={e => { const s = {...settings, printRemark: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} />
+                                    </div>
+
+                                    {/* 考科與範圍權限管理 */}
+                                    <div className="border-t pt-3 flex flex-col gap-2.5">
+                                        <label className="block text-xs font-bold text-slate-700">📚 考科與考試範圍設定：</label>
+                                        <div className="bg-slate-50 p-3 rounded-2xl border flex flex-col gap-2 text-xs">
+                                            <div>
+                                                <label className="block text-[10px] text-slate-500 mb-0.5">學科名稱 (例如: 地球科學)</label>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="科目名稱" 
+                                                    className="w-full p-2 bg-white border rounded-lg"
+                                                    value={newSubjectName}
+                                                    onChange={e => setNewSubjectName(e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="block text-[10px] text-slate-500 mb-0.5">考試範圍</label>
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="例如: 第1-2課" 
+                                                        className="w-full p-2 bg-white border rounded-lg"
+                                                        value={newSubjectScope}
+                                                        onChange={e => setNewSubjectScope(e.target.value)}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] text-slate-500 mb-0.5">考試日期</label>
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="例如: 07/05" 
+                                                        className="w-full p-2 bg-white border rounded-lg text-center"
+                                                        value={newSubjectDate}
+                                                        onChange={e => setNewSubjectDate(e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <button onClick={handleAddSubject} className="bg-[#00704A] hover:bg-[#005a3c] text-white text-xs font-bold py-2 rounded-lg mt-1 transition">
+                                                確定新增科目範圍
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-2xl border text-xs max-h-[180px] overflow-y-auto">
+                                            {settings.subjects.map((sub) => {
+                                                const subName = sub.name;
+                                                const isLocked = sub.locked || false;
+                                                return (
+                                                    <div key={subName} className="flex justify-between items-center py-1 hover:bg-slate-100 px-1.5 rounded transition">
+                                                        <div className="flex items-center gap-1 text-slate-700 min-w-0 flex-1 mr-2">
+                                                            <button onClick={() => handleDeleteSubject(subName)} className="text-rose-500 hover:text-rose-700 mr-1 shrink-0" title="刪除科目">
+                                                                ❌
+                                                            </button>
+                                                            <div className="truncate text-left">
+                                                                <span className="font-bold text-slate-800">{subName}</span>
+                                                                <span className="text-[9px] text-slate-400 ml-1">({sub.date})</span>
+                                                                <p className="text-[9px] text-slate-500 truncate">範圍: {sub.scope}</p>
+                                                            </div>
+                                                        </div>
+                                                        <label className="flex items-center gap-1 cursor-pointer shrink-0">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={isLocked} 
+                                                                onChange={e => {
+                                                                    const updatedSubjects = settings.subjects.map(s => {
+                                                                        if (s.name === subName) {
+                                                                            return { ...s, locked: e.target.checked };
+                                                                        }
+                                                                        return s;
+                                                                    });
+                                                                    const s = { ...settings, subjects: updatedSubjects };
+                                                                    setSettings(s);
+                                                                    saveSettingsToCloud(s);
+                                                                }}
+                                                                className="rounded text-rose-600 focus:ring-rose-500 w-3.5 h-3.5"
+                                                            />
+                                                            <span className={isLocked ? "text-rose-600 font-black text-[10px]" : "text-emerald-600 font-black text-[10px]"}>
+                                                                {isLocked ? "已鎖" : "可填"}
+                                                            </span>
+                                                        </label>
+                                                    </div>
+                                                );
+                                            })}
+                                            {settings.subjects.length === 0 && (
+                                                <p className="text-center py-2 text-slate-400 text-[10px]">無科目，請手動新增。</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2 border-t pt-3">
+                                        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-600">
+                                            <input type="checkbox" checked={settings.showTotalAvg} onChange={e => { const s = {...settings, showTotalAvg: e.target.checked}; setSettings(s); saveSettingsToCloud(s); }} className="rounded text-[#00704A] focus:ring-[#00704A]" />
+                                            <span>顯示總平均分數</span>
+                                        </label>
+                                        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-600">
+                                            <input type="checkbox" checked={settings.showGradeLevel} onChange={e => { const s = {...settings, showGradeLevel: e.target.checked}; setSettings(s); saveSettingsToCloud(s); }} className="rounded text-[#00704A] focus:ring-[#00704A]" />
+                                            <span>顯示學籍級距</span>
+                                        </label>
+                                        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-600">
+                                            <input type="checkbox" checked={settings.showClassAvg} onChange={e => { const s = {...settings, showClassAvg: e.target.checked}; setSettings(s); saveSettingsToCloud(s); }} className="rounded text-[#00704A] focus:ring-[#00704A]" />
+                                            <span>顯示各科班平均</span>
+                                        </label>
+                                        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-600">
+                                            <input type="checkbox" checked={settings.showProgress} onChange={e => { const s = {...settings, showProgress: e.target.checked}; setSettings(s); saveSettingsToCloud(s); }} className="rounded text-[#00704A] focus:ring-[#00704A]" />
+                                            <span>顯示進步分數 (含進步分數欄位)</span>
+                                        </label>
+                                        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-600">
+                                            <input type="checkbox" checked={settings.enableComments} onChange={e => { const s = {...settings, enableComments: e.target.checked}; setSettings(s); saveSettingsToCloud(s); }} className="rounded text-[#00704A] focus:ring-[#00704A]" />
+                                            <span>啟用智慧型學習診斷</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {}
+                            <div className="flex-grow flex flex-col gap-5">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                                    {/* 拖曳批次上傳區 */}
+                                    <div 
+                                        onDragOver={onDragOver}
+                                        onDragLeave={onDragLeave}
+                                        onDrop={onDrop}
+                                        className={`p-8 border-2 border-dashed rounded-[2rem] text-center flex flex-col items-center justify-center transition ${excelDragActive ? 'border-[#00704A] bg-emerald-50' : 'border-slate-300 bg-white hover:border-[#00704A]'}`}
+                                    >
+                                        <span className="text-4xl mb-2">📁</span>
+                                        <h4 className="font-bold text-slate-800 text-sm">拖放 Excel 檔案到這裡進行【批次名單與成績匯入】</h4>
+                                        <p className="text-[10px] text-slate-400 mt-1">或點擊按鈕選擇檔案 (.xlsx / .csv)</p>
+                                        
+                                        <div className="flex flex-wrap gap-2 mt-4 justify-center">
+                                            <button onClick={() => fileInputRef.current.click()} className="bg-[#00704A] hover:bg-[#005a3c] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition">
+                                                選擇 Excel
+                                            </button>
+                                            <button onClick={loadDemoData} className="bg-[#CBA258] hover:bg-[#b08b45] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition">
+                                                載入展示名單
+                                            </button>
+                                            <button onClick={clearDatabase} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-3.5 py-2 rounded-xl transition border">
+                                                清空
+                                            </button>
+                                            <button onClick={exportGradesToCSV} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow flex items-center gap-1">
+                                                💾 匯出 Excel
+                                            </button>
+                                        </div>
+                                        <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .xls, .csv" onChange={e => handleExcelUpload(e.target.files[0])} />
+                                    </div>
+
+                                    {/* 彙整摘要與範本下載面板 */}
+                                    <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-xl grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                        <div className="bg-slate-50 p-4 rounded-2xl border">
+                                            <span className="block text-[10px] text-slate-400 font-bold">總學生數</span>
+                                            <span className="block text-2xl font-black text-[#00704A] mt-1">{students.length} 位</span>
+                                        </div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl border">
+                                            <span className="block text-[10px] text-slate-400 font-bold">已設科目</span>
+                                            <span className="block text-2xl font-black text-slate-800 mt-1">{settings.subjects.length} 科</span>
+                                        </div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl border">
+                                            <span className="block text-[10px] text-slate-400 font-bold">班級總平均</span>
+                                            <span className="block text-2xl font-black text-indigo-700 mt-1">{stats.avg.toFixed(1)} 分</span>
+                                        </div>
+                                        <div className="bg-slate-50 p-4 rounded-2xl border col-span-2 sm:col-span-3 flex justify-between items-center px-4">
+                                            <div className="text-xs text-slate-500 font-bold">
+                                                A級: {stats.A}人 | B級: {stats.B}人 | C級: {stats.C}人
+                                            </div>
+                                            <button onClick={downloadTemplateCSV} className="text-xs text-[#00704A] font-bold underline">
+                                                📥 下載成績匯入 CSV 範本
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {}
+                                {/* 學生大名冊清單 */}
+                                <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden">
+                                    <div className="p-5 border-b flex justify-between items-center bg-slate-50">
+                                        <h4 className="font-black text-slate-800">學生段考學籍總覽</h4>
+                                        <div className="flex items-center gap-3">
+                                            <button 
+                                                onClick={() => setShowAddStudent(!showAddStudent)} 
+                                                className="bg-[#00704A] hover:bg-[#005a3c] text-white text-xs font-bold px-3 py-1.5 rounded-xl transition flex items-center gap-1"
+                                            >
+                                                {showAddStudent ? "❌ 取消手動新增" : "➕ 手動新增個別學生"}
+                                            </button>
+                                            <span className="text-xs text-slate-400 font-bold">雲端系統：即時同步中</span>
+                                        </div>
+                                    </div>
+
+                                    {/* 手動快速新增學生的抽屜表單 */}
+                                    {showAddStudent && (
+                                        <div className="p-5 bg-emerald-50/50 border-b border-emerald-100 flex flex-wrap gap-4 items-end animate-fade-in">
+                                            <div className="w-full sm:w-1/4">
+                                                <label className="block text-xs font-bold text-slate-500 mb-1">學生座號 (例如: A004 或 A005)</label>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="請輸入座號" 
+                                                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#00704A]"
+                                                    value={newStudentData.seatNo}
+                                                    onChange={e => setNewStudentData({...newStudentData, seatNo: e.target.value})}
+                                                />
+                                            </div>
+                                            <div className="w-full sm:w-1/4">
+                                                <label className="block text-xs font-bold text-slate-500 mb-1">學生姓名</label>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="例如: 李大同" 
+                                                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#00704A]"
+                                                    value={newStudentData.name}
+                                                    onChange={e => setNewStudentData({...newStudentData, name: e.target.value})}
+                                                />
+                                            </div>
+                                            <div className="w-full sm:w-1/4">
+                                                <label className="block text-xs font-bold text-slate-500 mb-1">查詢密碼 (空白預設與座號相同)</label>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="請設定密碼" 
+                                                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#00704A]"
+                                                    value={newStudentData.password}
+                                                    onChange={e => setNewStudentData({...newStudentData, password: e.target.value})}
+                                                />
+                                            </div>
+                                            <button 
+                                                onClick={handleAddStudent} 
+                                                className="bg-[#00704A] hover:bg-[#005a3c] text-white text-xs font-bold px-5 py-3 rounded-xl transition shadow active:scale-95"
+                                            >
+                                                確定新增至班級
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* 學生列表表格 */}
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-slate-200 text-center text-xs">
+                                            <thead className="bg-slate-100 text-slate-600">
+                                                <tr>
+                                                    <th className="px-4 py-3 font-bold text-left pl-6">座號</th>
+                                                    <th className="px-4 py-3 font-bold">姓名</th>
+                                                    {settings.subjects.map(sub => (
+                                                        <th key={sub.name} className="px-3 py-3 font-bold">{sub.name}</th>
+                                                    ))}
+                                                    <th className="px-4 py-3 font-bold">總平均</th>
+                                                    <th className="px-4 py-3 font-bold">進步分數</th>
+                                                    <th className="px-4 py-3 font-bold text-right pr-6">操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-slate-100 font-medium">
+                                                {students.map((s, idx) => {
+                                                    const sAvg = calculateStudentAvg(s);
+                                                    return (
+                                                        <tr key={idx} className="hover:bg-slate-50">
+                                                            <td className="px-4 py-3.5 text-left pl-6 font-bold text-[#00704A]">{s.seatNo}</td>
+                                                            <td className="px-4 py-3.5 font-bold text-slate-800">{s.name}</td>
+                                                            
+                                                            {settings.subjects.map(sub => {
+                                                                const subName = sub.name;
+                                                                const score = getStudentScore(s, subName);
+                                                                const classAvg = calculateClassSubjectAvg(subName);
+                                                                const isBelowAvg = score !== null && classAvg > 0 && score < classAvg;
+                                                                
+                                                                return (
+                                                                    <td key={subName} className={`px-3 py-3.5 transition-colors ${isBelowAvg ? 'text-rose-600 font-extrabold bg-rose-50/20' : 'text-slate-500'}`}>
+                                                                        {score !== null ? (
+                                                                            <span className="flex items-center justify-center gap-0.5">
+                                                                                {score.toFixed(1)}
+                                                                                {isBelowAvg && <span className="text-[10px] text-rose-500 font-bold" title="低於班平均">↓</span>}
+                                                                            </span>
+                                                                        ) : "-"}
+                                                                    </td>
+                                                                );
+                                                            })}
+
+                                                            <td className="px-4 py-3.5 font-extrabold text-[#00704A]">{sAvg.toFixed(1)}</td>
+                                                            <td className={`px-4 py-3.5 font-bold ${s.progress >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                                {s.progress >= 0 ? `+${s.progress}` : s.progress}
+                                                            </td>
+                                                            <td className="px-4 py-3.5 text-right pr-6 whitespace-nowrap">
+                                                                <button onClick={() => openModifyStudentModal(s)} className="text-blue-600 hover:text-blue-900 font-bold text-xs mr-3">
+                                                                    📝 編輯
+                                                                </button>
+                                                                <button onClick={() => { setCurrentStudent(s); setViewMode('parent-dashboard'); }} className="text-[#00704A] hover:underline font-bold text-xs">
+                                                                    🔎 預覽列印
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                {students.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan={6 + settings.subjects.length} className="text-center py-12 text-slate-400 font-medium">
+                                                            目前沒有學生資料，請手動新增個別學生，或上傳 Excel 成績總表。
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* ================================== 編輯學生成績燈箱 (Modal) ================================== */}
+                            {modifyingStudent && (
+                                <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all duration-300">
+                                    <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-100 p-6 flex flex-col gap-4 max-h-[90vh] overflow-hidden">
+                                        <div className="flex justify-between items-center pb-3 border-b">
+                                            <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                                                <span>📝 編輯學生：{modifyingStudent.name} (座號：{modifyingStudent.seatNo})</span>
+                                            </h3>
+                                            <button onClick={() => setModifyingStudent(null)} className="text-slate-400 hover:text-slate-600 text-sm font-bold">
+                                                關閉
+                                            </button>
+                                        </div>
+
+                                        <div className="flex-grow overflow-y-auto pr-1 space-y-5 py-2">
+                                            <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 rounded-2xl border">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-500 mb-1">姓名</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full p-2 bg-white border rounded-xl text-sm font-bold" 
+                                                        value={modifyingStudent.name} 
+                                                        onChange={e => setModifyingStudent({ ...modifyingStudent, name: e.target.value })}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-500 mb-1">登入密碼</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full p-2 bg-white border rounded-xl text-sm font-bold" 
+                                                        value={modifyingStudent.password} 
+                                                        onChange={e => setModifyingStudent({ ...modifyingStudent, password: e.target.value })}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-500 mb-1">進步分數</label>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.1"
+                                                        className="w-full p-2 bg-white border rounded-xl text-sm font-bold" 
+                                                        value={modifyingStudent.progress} 
+                                                        onChange={e => setModifyingStudent({ ...modifyingStudent, progress: parseFloat(e.target.value) || 0 })}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <h4 className="font-bold text-slate-700 text-sm mb-3">📚 各科成績單一登錄：</h4>
+                                                {settings.subjects.length === 0 ? (
+                                                    <p className="text-xs text-slate-400">目前無科目設定，請先至設定中心新增科目。</p>
+                                                ) : (
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        {settings.subjects.map(sub => {
+                                                            const subName = sub.name;
+                                                            const val = getStudentScore(modifyingStudent, subName) ?? '';
+                                                            return (
+                                                                <div key={subName} className="bg-stone-50/50 p-3 rounded-2xl border flex flex-col gap-2">
+                                                                    <div className="flex justify-between items-center border-b pb-1">
+                                                                        <span className="font-bold text-xs text-[#00704A]">【{subName}】</span>
+                                                                        <span className="text-[9px] text-slate-400">範圍: {sub.scope}</span>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-[9px] font-bold text-slate-400 mb-1">本次評量成績</label>
+                                                                        <input 
+                                                                            type="number" 
+                                                                            min="0"
+                                                                            max="100"
+                                                                            placeholder="未登記"
+                                                                            className="w-full p-1.5 bg-white border rounded-lg text-xs text-center font-bold" 
+                                                                            value={val} 
+                                                                            onChange={e => {
+                                                                                const sVal = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                                                                const currentScores = modifyingStudent.scores || {};
+                                                                                setModifyingStudent({
+                                                                                    ...modifyingStudent,
+                                                                                    scores: {
+                                                                                        ...currentScores,
+                                                                                        [subName]: sVal
+                                                                                    }
+                                                                                });
+                                                                            }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-end gap-2 pt-3 border-t">
+                                            <button onClick={() => setModifyingStudent(null)} className="px-4 py-2 border rounded-xl text-xs font-semibold hover:bg-slate-50">
+                                                取消
+                                            </button>
+                                            <button onClick={saveModifiedStudent} className="bg-[#00704A] hover:bg-[#005a3c] text-white px-5 py-2 rounded-xl text-xs font-bold transition shadow">
+                                                💾 確定儲存變更
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </main>
+                    )}
+
+                    {/* 版權與教師管理入口 */}
+                    <footer className="no-print bg-slate-900 text-slate-400 py-8 text-center text-xs mt-auto">
+                        <div className="max-w-md mx-auto flex flex-col items-center gap-3">
+                            <p>© 2026 @315 成績查詢系統。</p>
+                            {showTeacherLogin ? (
+                                <div className="bg-slate-800 p-3 rounded-2xl border border-slate-700/60 w-full flex gap-2">
+                                    <input 
+                                        type="password" 
+                                        placeholder="請輸入教師管理密碼" 
+                                        className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1 text-xs text-white flex-grow focus:outline-none focus:ring-2 focus:ring-[#00704A]"
+                                        value={teacherPass}
+                                        onChange={e => setTeacherPass(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleTeacherLogin()}
+                                    />
+                                    <button onClick={handleTeacherLogin} className="bg-[#00704A] text-white px-4 py-1 rounded-xl text-xs font-bold hover:bg-[#005a3c] transition">
+                                        驗證
+                                    </button>
+                                </div>
+                            ) : (
+                                <button onClick={() => setShowTeacherLogin(true)} className="text-[10px] text-slate-600 hover:text-slate-400 transition underline">
+                                    ⚙️ 導師管理後台入口
+                                </button>
+                            )}
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
