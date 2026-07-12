@@ -113,7 +113,9 @@
             const [firebaseReady, setFirebaseReady] = useState(!!window.firebaseAPI?.auth);
             const [firebaseUser, setFirebaseUser] = useState(null);
             
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            // 確保 appId 絕對不為空字串，避免 Firebase 路徑解析錯誤
+            const appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'default-app-id';
+            const basePath = `artifacts/${appId}/public/data`;
             
             // 系統模式與頁面
             const [viewMode, setViewMode] = useState('parent-login'); 
@@ -205,7 +207,8 @@
                 if (!firebaseReady || !firebaseUser) return;
                 const { db, collection, doc, onSnapshot } = window.firebaseAPI;
 
-                const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
+                // 改用絕對路徑寫法
+                const settingsRef = doc(db, `${basePath}/settings/global`);
                 const unsubSettings = onSnapshot(settingsRef, (snap) => {
                     if (snap.exists()) {
                         const cloudData = snap.data();
@@ -218,7 +221,8 @@
                     }
                 }, (error) => console.error("設定檔讀取失敗:", error));
 
-                const studentsRef = collection(db, 'artifacts', appId, 'public', 'data', 'submissions');
+                // 改用絕對路徑寫法
+                const studentsRef = collection(db, `${basePath}/submissions`);
                 const unsubStudents = onSnapshot(studentsRef, (snap) => {
                     const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     list.sort((a, b) => String(a.seatNo || '').localeCompare(String(b.seatNo || ''), undefined, {numeric: true}));
@@ -243,7 +247,7 @@
                 if (!firebaseUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), newSettings);
+                    await setDoc(doc(db, `${basePath}/settings/global`), newSettings);
                     showToast("教師端設定已同步儲存！");
                 } catch (e) {
                     showToast("同步失敗：" + e.message, "error");
@@ -384,8 +388,8 @@
 
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
-                    // 使用 Promise.all 進行平行寫入，將寫入時間從近10秒縮短到瞬間完成
-                    await Promise.all(parsedStudents.map(s => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), s)));
+                    // 使用 Promise.all 進行平行寫入，改用絕對路徑
+                    await Promise.all(parsedStudents.map(s => setDoc(doc(db, `${basePath}/submissions/${s.id}`), s)));
                     showToast(`✅ 成功匯入更新 ${parsedStudents.length} 筆學生資料與成績！`);
                 } catch (err) {
                     showToast("寫入資料庫失敗：" + err.message, "error");
@@ -500,9 +504,9 @@
                         if (!window.confirm("⚠️ 警告：還原將會覆蓋目前的「所有設定與學生資料」，確定繼續？")) return;
 
                         const { db, doc, setDoc } = window.firebaseAPI;
-                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), backupData.settings);
+                        await setDoc(doc(db, `${basePath}/settings/global`), backupData.settings);
                         for (const s of backupData.students) {
-                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), s);
+                            await setDoc(doc(db, `${basePath}/submissions/${s.id}`), s);
                         }
                         showToast("🔄 系統備份已成功還原！");
                     } catch (err) { showToast("還原失敗：" + err.message, "error"); }
@@ -551,7 +555,7 @@
                     const { db, doc, setDoc } = window.firebaseAPI;
                     let count = 0;
                     for (const s of class315List) {
-                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), s);
+                        await setDoc(doc(db, `${basePath}/submissions/${s.id}`), s);
                         count++;
                     }
                     showToast(`✅ 成功載入 315 班 ${count} 位正式學生名單！`);
@@ -586,7 +590,7 @@
                     
                     try {
                         const { db, doc, setDoc } = window.firebaseAPI;
-                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', found.id), updatedStudent);
+                        await setDoc(doc(db, `${basePath}/submissions/${found.id}`), updatedStudent);
                     } catch (e) { console.error("登入次數同步失敗", e); }
                 } else {
                     showToast("座號或密碼輸入錯誤！", "error");
@@ -622,7 +626,7 @@
                     const updatedScores = { ...currentStudent.scores, [editingSubject]: scoreNum };
                     const updatedStudent = { ...currentStudent, scores: updatedScores };
 
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', currentStudent.id), updatedStudent);
+                    await setDoc(doc(db, `${basePath}/submissions/${currentStudent.id}`), updatedStudent);
                     setCurrentStudent(updatedStudent);
                     setEditingSubject(null);
                     showToast(`${editingSubject} 成績已儲存！`);
@@ -641,7 +645,7 @@
                     const { db, doc, setDoc } = window.firebaseAPI;
                     const newId = `student_${seat}`;
                     const studentObj = { id: newId, seatNo: seat, name, password: pwd, progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} };
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', newId), studentObj);
+                    await setDoc(doc(db, `${basePath}/submissions/${newId}`), studentObj);
                     setNewStudentData({ seatNo: '', name: '', password: '' });
                     setShowAddStudent(false);
                     showToast(`學生 ${name} 新增成功！`);
@@ -652,7 +656,7 @@
                 if (!window.confirm(`確定要刪除學生 ${student.name} 的資料嗎？`)) return;
                 try {
                     const { db, doc, deleteDoc } = window.firebaseAPI;
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', student.id));
+                    await deleteDoc(doc(db, `${basePath}/submissions/${student.id}`));
                     showToast(`已刪除學生 ${student.name}！`);
                 } catch (e) { showToast("刪除失敗：" + e.message, "error"); }
             };
@@ -662,7 +666,7 @@
                 if (!modifyingStudent.name.trim()) return showToast("姓名不能為空！", "error");
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', modifyingStudent.id), modifyingStudent);
+                    await setDoc(doc(db, `${basePath}/submissions/${modifyingStudent.id}`), modifyingStudent);
                     setModifyingStudent(null);
                     showToast("學生資訊已更新！");
                 } catch (e) { showToast("儲存失敗：" + e.message, "error"); }
@@ -694,7 +698,7 @@
                 try {
                     const { db, doc, deleteDoc } = window.firebaseAPI;
                     for (const s of students) {
-                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id));
+                        await deleteDoc(doc(db, `${basePath}/submissions/${s.id}`));
                     }
                     showToast("資料庫已清空！");
                 } catch (e) { showToast("清空失敗：" + e.message, "error"); }
