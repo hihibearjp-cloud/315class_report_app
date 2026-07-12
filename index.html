@@ -182,8 +182,14 @@
                             await signInAnonymously(auth);
                         }
                     } catch (err) {
-                        console.error("Firebase 驗證失敗:", err);
-                        showToast("系統連線異常，請重新整理頁面。", "error");
+                        console.warn("自訂驗證憑證可能已過期，啟動備用連線...", err);
+                        // 防呆機制：Token 過期時自動降級為一般訪客連線
+                        try {
+                            await signInAnonymously(auth);
+                        } catch (fallbackErr) {
+                            console.error("備用連線也失敗:", fallbackErr);
+                            showToast("系統連線異常，請嘗試重新整理網頁。", "error");
+                        }
                     }
                 };
 
@@ -234,7 +240,8 @@
             };
 
             const saveSettingsToCloud = async (newSettings) => {
-                if (!firebaseUser) return showToast("尚未連線至伺服器", "error");
+                const currentUser = window.firebaseAPI?.auth?.currentUser;
+                if (!currentUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
                     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), newSettings);
@@ -364,12 +371,13 @@
             // ================= 批次匯入功能 (增強 CSV 與 Excel 雙支援) =================
             const handleFileUpload = (file) => {
                 if (!file) return;
-                if (!firebaseUser) return showToast("資料庫尚未連線，請等候一秒再試！", "error");
+                // 放寬檢測條件，不再強硬阻擋，避免因 Token 延遲導致無法上傳
+                const currentUser = window.firebaseAPI?.auth?.currentUser;
+                if (!currentUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
 
                 const isCSV = file.name.toLowerCase().endsWith('.csv');
 
                 if (isCSV) {
-                    // 原生 CSV 解析 (避免依賴套件失敗)
                     const reader = new FileReader();
                     reader.onload = async (e) => {
                         try {
@@ -394,7 +402,6 @@
                     };
                     reader.readAsText(file, "UTF-8");
                 } else {
-                    // Excel (.xlsx) 解析
                     const reader = new FileReader();
                     reader.onload = async (e) => {
                         try {
@@ -409,13 +416,13 @@
                     reader.readAsArrayBuffer(file);
                 }
 
-                // 強制重置檔案選擇器，允許連續上傳同一個檔案
                 if (fileInputRef.current) fileInputRef.current.value = "";
             };
 
             const handleSubjectExcelUpload = (file) => {
                 if (!file) return;
-                if (!firebaseUser) return showToast("資料庫尚未連線，請稍後！", "error");
+                const currentUser = window.firebaseAPI?.auth?.currentUser;
+                if (!currentUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
 
                 const isCSV = file.name.toLowerCase().endsWith('.csv');
 
@@ -540,7 +547,10 @@
             };
 
             const importBackupJSON = (file) => {
-                if (!file || !firebaseUser) return;
+                if (!file) return;
+                const currentUser = window.firebaseAPI?.auth?.currentUser;
+                if (!currentUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
+
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     try {
@@ -558,6 +568,56 @@
                 };
                 reader.readAsText(file);
                 if (backupFileInputRef.current) backupFileInputRef.current.value = "";
+            };
+
+            // ================= 載入 315 班正式名單 =================
+            const loadDemoData = async () => {
+                const currentUser = window.firebaseAPI?.auth?.currentUser;
+                if (!currentUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
+
+                const class315List = [
+                    { id: "student_1", seatNo: "1", name: "方煒翔", password: "A01", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_2", seatNo: "2", name: "何家均", password: "A02", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_3", seatNo: "3", name: "周科呈", password: "A03", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_4", seatNo: "4", name: "周晉源", password: "A04", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_5", seatNo: "5", name: "邱文廷", password: "A05", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_6", seatNo: "6", name: "施畯紳", password: "A06", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_8", seatNo: "8", name: "曾繁夏", password: "A08", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_9", seatNo: "9", name: "黃哲逵", password: "A09", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_10", seatNo: "10", name: "楊仲宇", password: "A10", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_11", seatNo: "11", name: "蔡侑庭", password: "A11", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_12", seatNo: "12", name: "蔡承育", password: "A12", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_13", seatNo: "13", name: "蕭敬哲", password: "A13", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_14", seatNo: "14", name: "謝明軒", password: "A14", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_15", seatNo: "15", name: "簡子傑", password: "A15", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_16", seatNo: "16", name: "顏方胤", password: "A16", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_17", seatNo: "17", name: "方幼奾", password: "A17", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_18", seatNo: "18", name: "林鎮汝", password: "A18", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_19", seatNo: "19", name: "洪茗品", password: "A19", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_20", seatNo: "20", name: "洪毓婕", password: "A20", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_21", seatNo: "21", name: "莊詠晴", password: "A21", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_22", seatNo: "22", name: "許庭旖", password: "A22", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_23", seatNo: "23", name: "陳薏帆", password: "A23", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_24", seatNo: "24", name: "黃奕臻", password: "A24", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_25", seatNo: "25", name: "黃翊瑄", password: "A25", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_26", seatNo: "26", name: "葉昕潔", password: "A26", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_27", seatNo: "27", name: "蕭伊婷", password: "A27", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_28", seatNo: "28", name: "薛丞妤", password: "A28", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_29", seatNo: "29", name: "蘇沛紜", password: "A29", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_30", seatNo: "30", name: "周品瑜", password: "A30", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} }
+                ];
+
+                try {
+                    const { db, doc, setDoc } = window.firebaseAPI;
+                    let count = 0;
+                    for (const s of class315List) {
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), s);
+                        count++;
+                    }
+                    showToast(`✅ 成功載入 315 班 ${count} 位正式學生名單！`);
+                } catch (e) {
+                    showToast("載入名單失敗：" + e.message, "error");
+                }
             };
 
             // ================= 系統邏輯 =================
@@ -613,7 +673,7 @@
             };
 
             const saveStudentScore = async () => {
-                if (!firebaseUser || !currentStudent) return;
+                if (!currentStudent) return;
                 const scoreNum = parseFloat(editForm.score);
                 if (isNaN(scoreNum) || scoreNum < 0 || scoreNum > 100) return showToast("請輸入 0-100 的成績！", "error");
 
@@ -649,7 +709,6 @@
             };
 
             const handleDeleteStudent = async (student) => {
-                if(!firebaseUser) return;
                 if (!window.confirm(`確定要刪除學生 ${student.name} 的資料嗎？`)) return;
                 try {
                     const { db, doc, deleteDoc } = window.firebaseAPI;
@@ -659,7 +718,7 @@
             };
 
             const saveModifiedStudent = async () => {
-                if (!firebaseUser || !modifyingStudent) return;
+                if (!modifyingStudent) return;
                 if (!modifyingStudent.name.trim()) return showToast("姓名不能為空！", "error");
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
@@ -691,7 +750,6 @@
             };
 
             const clearDatabase = async () => {
-                if (!firebaseUser) return;
                 if (!window.confirm(`警告：將清空所有學生的名單與成績！確定嗎？`)) return;
                 try {
                     const { db, doc, deleteDoc } = window.firebaseAPI;
@@ -1126,6 +1184,7 @@
                                         <p className="text-[10px] text-slate-500 mt-1">支援班排、校排等進階欄位，可當週報更新</p>
                                         <div className="flex flex-wrap gap-2 mt-4 justify-center">
                                             <button onClick={() => fileInputRef.current.click()} className="bg-[#00704A] hover:bg-[#005a3c] text-white text-xs px-4 py-2 rounded-xl font-bold transition shadow-md">📤 匯入名單與成績</button>
+                                            <button onClick={loadDemoData} className="bg-[#CBA258] hover:bg-[#b08b45] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-md">一鍵載入315正式名單</button>
                                             <button onClick={downloadStudentTemplate} className="bg-emerald-100 hover:bg-emerald-200 text-[#00704A] font-bold text-xs px-3.5 py-2 rounded-xl transition">📥 下載範本</button>
                                             <button onClick={clearDatabase} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-3.5 py-2 rounded-xl border transition">清空資料</button>
                                             <button onClick={exportGradesToCSV} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">💾 匯出 Excel</button>
@@ -1329,5 +1388,3 @@
     </script>
 </body>
 </html>
-
-
