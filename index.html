@@ -240,8 +240,7 @@
             };
 
             const saveSettingsToCloud = async (newSettings) => {
-                const currentUser = window.firebaseAPI?.auth?.currentUser;
-                if (!currentUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
+                if (!firebaseUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
                     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), newSettings);
@@ -326,14 +325,42 @@
             };
 
             // ================= 共用匯入寫入邏輯 =================
+            const processExcelOrCsv = (file, callback) => {
+                if (!file) return;
+                if (!firebaseUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        // SheetJS 強大的相容性，可同時完美處理帶有 BOM 的 CSV 與各類 Excel 檔案
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const json = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { defval: "" });
+                        
+                        // 移除標題列中夾帶的 BOM (\uFEFF) 與空白字元，確保鍵值比對 100% 成功
+                        const cleanedJson = json.map(row => {
+                            const cRow = {};
+                            for (let k in row) cRow[k.replace(/^\uFEFF/, '').trim()] = row[k];
+                            return cRow;
+                        });
+                        
+                        await callback(cleanedJson);
+                    } catch (err) {
+                        showToast("檔案解析失敗，請確認檔案格式：" + err.message, "error");
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            };
+
             const processImportedJson = async (json) => {
                 if (json.length === 0) return showToast("檔案內沒有有效數據！", "error");
 
                 const parsedStudents = json.map((row, idx) => {
-                    const seat = String(row['座號'] || `A${String(idx+1).padStart(3, '0')}`);
+                    const seat = String(row['座號'] || String(idx+1)).trim();
                     const existingStudent = students.find(s => s.seatNo === seat);
                     
-                    const studentScores = existingStudent?.scores || {};
+                    const studentScores = { ...(existingStudent?.scores || {}) };
                     settings.subjects.forEach(sub => {
                         if (row[sub.name] !== undefined && row[sub.name] !== '') {
                             studentScores[sub.name] = parseFloat(row[sub.name]);
@@ -343,8 +370,8 @@
                     return {
                         id: `student_${seat}`,
                         seatNo: seat,
-                        name: String(row['姓名'] || (existingStudent ? existingStudent.name : `同學 ${idx+1}`)),
-                        password: row['密碼'] !== undefined && row['密碼'] !== '' ? String(row['密碼']) : (existingStudent ? existingStudent.password : seat), 
+                        name: String(row['姓名'] || (existingStudent ? existingStudent.name : `同學 ${idx+1}`)).trim(),
+                        password: row['密碼'] !== undefined && row['密碼'] !== '' ? String(row['密碼']).trim() : (existingStudent ? existingStudent.password : seat), 
                         progress: row['進步分數'] !== undefined && row['進步分數'] !== '' ? parseFloat(row['進步分數']) : (existingStudent?.progress || 0),
                         loginCount: existingStudent?.loginCount || 0,
                         classRank: row['班排'] !== undefined && row['班排'] !== '' ? parseInt(row['班排']) : (existingStudent?.classRank || null),
@@ -357,12 +384,9 @@
 
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
-                    let count = 0;
-                    for (const s of parsedStudents) {
-                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), s);
-                        count++;
-                    }
-                    showToast(`✅ 成功匯入更新 ${count} 筆學生資料與成績！`);
+                    // 使用 Promise.all 進行平行寫入，將寫入時間從近10秒縮短到瞬間完成
+                    await Promise.all(parsedStudents.map(s => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', s.id), s)));
+                    showToast(`✅ 成功匯入更新 ${parsedStudents.length} 筆學生資料與成績！`);
                 } catch (err) {
                     showToast("寫入資料庫失敗：" + err.message, "error");
                 }
@@ -370,63 +394,12 @@
 
             // ================= 批次匯入功能 (增強 CSV 與 Excel 雙支援) =================
             const handleFileUpload = (file) => {
-                if (!file) return;
-                // 放寬檢測條件，不再強硬阻擋，避免因 Token 延遲導致無法上傳
-                const currentUser = window.firebaseAPI?.auth?.currentUser;
-                if (!currentUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
-
-                const isCSV = file.name.toLowerCase().endsWith('.csv');
-
-                if (isCSV) {
-                    const reader = new FileReader();
-                    reader.onload = async (e) => {
-                        try {
-                            const text = e.target.result;
-                            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-                            if (lines.length < 2) return showToast("CSV 檔案為空或無標題列", "error");
-                            
-                            const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
-                            const json = [];
-                            for(let i = 1; i < lines.length; i++) {
-                                const values = lines[i].split(',').map(v => v.replace(/^"|"$/g, '').trim());
-                                const row = {};
-                                headers.forEach((h, idx) => {
-                                    row[h] = values[idx];
-                                });
-                                json.push(row);
-                            }
-                            await processImportedJson(json);
-                        } catch(err) {
-                            showToast("CSV 解析失敗：" + err.message, "error");
-                        }
-                    };
-                    reader.readAsText(file, "UTF-8");
-                } else {
-                    const reader = new FileReader();
-                    reader.onload = async (e) => {
-                        try {
-                            const data = new Uint8Array(e.target.result);
-                            const workbook = XLSX.read(data, { type: 'array' });
-                            const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                            await processImportedJson(json);
-                        } catch (err) {
-                            showToast("Excel 解析失敗，請確認檔案格式或改用 CSV：" + err.message, "error");
-                        }
-                    };
-                    reader.readAsArrayBuffer(file);
-                }
-
+                processExcelOrCsv(file, processImportedJson);
                 if (fileInputRef.current) fileInputRef.current.value = "";
             };
 
             const handleSubjectExcelUpload = (file) => {
-                if (!file) return;
-                const currentUser = window.firebaseAPI?.auth?.currentUser;
-                if (!currentUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
-
-                const isCSV = file.name.toLowerCase().endsWith('.csv');
-
-                const processSubjects = async (json) => {
+                processExcelOrCsv(file, async (json) => {
                     if (json.length === 0) return showToast("無數據", "error");
                     const newSubjects = json.map(row => ({
                         name: String(row['科目'] || row['考科'] || '').trim(),
@@ -435,44 +408,13 @@
                         locked: false
                     })).filter(s => s.name !== '');
 
-                    if(newSubjects.length === 0) return showToast("找不到「科目」標題列", "error");
+                    if(newSubjects.length === 0) return showToast("找不到「科目」標題列，請確認範本格式", "error");
 
                     const updatedSettings = { ...settings, subjects: newSubjects };
                     setSettings(updatedSettings);
                     await saveSettingsToCloud(updatedSettings);
                     showToast(`✅ 成功批次匯入 ${newSubjects.length} 個考試科目！`);
-                };
-
-                if (isCSV) {
-                    const reader = new FileReader();
-                    reader.onload = async (e) => {
-                        try {
-                            const text = e.target.result;
-                            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-                            const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
-                            const json = [];
-                            for(let i = 1; i < lines.length; i++) {
-                                const values = lines[i].split(',').map(v => v.replace(/^"|"$/g, '').trim());
-                                const row = {};
-                                headers.forEach((h, idx) => { row[h] = values[idx]; });
-                                json.push(row);
-                            }
-                            await processSubjects(json);
-                        } catch(err) { showToast("CSV 失敗：" + err.message, "error"); }
-                    };
-                    reader.readAsText(file, "UTF-8");
-                } else {
-                    const reader = new FileReader();
-                    reader.onload = async (e) => {
-                        try {
-                            const data = new Uint8Array(e.target.result);
-                            const workbook = XLSX.read(data, { type: 'array' });
-                            const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                            await processSubjects(json);
-                        } catch(err) { showToast("Excel 失敗：" + err.message, "error"); }
-                    };
-                    reader.readAsArrayBuffer(file);
-                }
+                });
                 
                 if (subjectFileInputRef.current) subjectFileInputRef.current.value = "";
             };
@@ -506,9 +448,9 @@
             const downloadStudentTemplate = () => {
                 let csvContent = "\uFEFF座號,姓名,密碼,進步分數,班排,班排進步,校排,校排進步";
                 settings.subjects.forEach(sub => csvContent += `,${sub.name}`);
-                csvContent += "\r\nA001,王小明,mySecretPwd123,3.5,1,2,15,5";
+                csvContent += "\r\n1,王小明,mySecretPwd123,3.5,1,2,15,5";
                 settings.subjects.forEach(() => csvContent += ",85");
-                csvContent += "\r\nA002,陳美玲,A002,0,2,-1,20,-3";
+                csvContent += "\r\n2,陳美玲,2,0,2,-1,20,-3";
                 
                 const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
                 const link = document.createElement("a");
@@ -548,8 +490,7 @@
 
             const importBackupJSON = (file) => {
                 if (!file) return;
-                const currentUser = window.firebaseAPI?.auth?.currentUser;
-                if (!currentUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
+                if (!firebaseUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
 
                 const reader = new FileReader();
                 reader.onload = async (e) => {
@@ -572,8 +513,7 @@
 
             // ================= 載入 315 班正式名單 =================
             const loadDemoData = async () => {
-                const currentUser = window.firebaseAPI?.auth?.currentUser;
-                if (!currentUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
+                if (!firebaseUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
 
                 const class315List = [
                     { id: "student_1", seatNo: "1", name: "方煒翔", password: "A01", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
@@ -996,7 +936,7 @@
                                         <span className="p-1 bg-green-50 text-[#00704A] rounded">👤</span> 學生與家長查詢通道
                                     </h3>
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 mb-1">座號 (範例：A001)</label>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">座號 (範例：1、2...21)</label>
                                         <input type="text" placeholder="請輸入座號" className="w-full p-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00704A]" value={loginData.seatNo} onChange={e => setLoginData({...loginData, seatNo: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleParentLogin()} />
                                     </div>
                                     <div>
@@ -1242,7 +1182,7 @@
                                     {showAddStudent && (
                                         <div className="p-5 bg-emerald-50/50 flex flex-wrap gap-4 items-end animate-fade-in border-b border-emerald-100">
                                             <div className="w-full sm:w-1/4">
-                                                <input type="text" placeholder="座號 (例:A01)" className="w-full p-2 bg-white border rounded-lg text-xs" value={newStudentData.seatNo} onChange={e => setNewStudentData({...newStudentData, seatNo: e.target.value})} />
+                                                <input type="text" placeholder="座號 (例:1)" className="w-full p-2 bg-white border rounded-lg text-xs" value={newStudentData.seatNo} onChange={e => setNewStudentData({...newStudentData, seatNo: e.target.value})} />
                                             </div>
                                             <div className="w-full sm:w-1/4">
                                                 <input type="text" placeholder="姓名" className="w-full p-2 bg-white border rounded-lg text-xs" value={newStudentData.name} onChange={e => setNewStudentData({...newStudentData, name: e.target.value})} />
@@ -1302,7 +1242,7 @@
                                                             </td>
                                                         )}
                                                         <td className="px-4 py-3.5 text-right pr-6 whitespace-nowrap">
-                                                            <button onClick={() => openModifyStudentModal(s)} className="text-blue-600 mr-2" title="編輯學生密碼與成績">📝</button>
+                                                            <button onClick={() => setModifyingStudent(s)} className="text-blue-600 mr-2" title="編輯學生密碼與成績">📝</button>
                                                             <button onClick={() => handleDeleteStudent(s)} className="text-rose-600 mr-2" title="刪除學生">🗑️</button>
                                                             <button onClick={() => { setCurrentStudent(s); setViewMode('parent-dashboard'); }} className="text-[#00704A]" title="預覽該生成績單">🔎</button>
                                                         </td>
@@ -1378,10 +1318,6 @@
                 </div>
             );
         }
-
-        const openModifyStudentModal = (student) => {
-            document.querySelector('#root')._reactRootContainer?._internalRoot.current.child.memoizedState.queue.dispatch(student);
-        };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
