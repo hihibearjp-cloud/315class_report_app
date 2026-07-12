@@ -132,6 +132,7 @@
                 showClassAvg: true,
                 showProgress: true,
                 enableComments: true,
+                showRadarChart: true,
                 subjects: []
             });
 
@@ -157,6 +158,7 @@
             const [newSubjectDate, setNewSubjectDate] = useState('');
 
             // UI 狀態控制
+            const [editingSubjectConfig, setEditingSubjectConfig] = useState(null); // 新增：單獨編輯考科範圍與日期的狀態
             const [toast, setToast] = useState(null);
             const [excelDragActive, setExcelDragActive] = useState(false);
             const fileInputRef = useRef(null);
@@ -211,7 +213,7 @@
                             if (typeof sub === 'string') return { name: sub, date: "07/05", scope: "未設定範圍", locked: false };
                             return { name: sub.name || "", date: sub.date || "未設定", scope: sub.scope || "未設定", locked: sub.locked || false };
                         });
-                        setSettings({ ...cloudData, subjects: normalizedSubjects, examType: cloudData.examType || "一般" });
+                        setSettings({ ...cloudData, subjects: normalizedSubjects, examType: cloudData.examType || "一般", showRadarChart: cloudData.showRadarChart ?? true });
                     }
                 }, (error) => console.error("設定檔讀取失敗:", error));
 
@@ -701,10 +703,12 @@
                                 <h2 className="text-2xl font-black text-slate-800 mt-1">{targetStudent.name} <span className="text-sm font-medium text-slate-500">的成績通知單</span></h2>
                             </div>
 
-                            <div className="bg-slate-50/50 p-4 rounded-3xl border border-slate-100 text-center">
-                                <span className="text-xs font-bold text-[#00704A] bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 inline-block mb-2">週報/考試雷達分佈圖</span>
-                                {renderRadarChart(targetStudent)}
-                            </div>
+                            {settings.showRadarChart !== false && (
+                                <div className="bg-slate-50/50 p-4 rounded-3xl border border-slate-100 text-center">
+                                    <span className="text-xs font-bold text-[#00704A] bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 inline-block mb-2">週報/考試雷達分佈圖</span>
+                                    {renderRadarChart(targetStudent)}
+                                </div>
+                            )}
 
                             <div className="overflow-hidden border border-slate-200 rounded-2xl shadow-sm">
                                 <table className="min-w-full divide-y divide-slate-200 text-center text-xs">
@@ -945,27 +949,29 @@
                                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl flex flex-col gap-4">
                                     <h3 className="font-black text-slate-800 text-lg pb-3 border-b">⚙️ 班級管理設定</h3>
                                     
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 mb-1">本次考試類型 (決定是否顯示排名)</label>
-                                        <select className="w-full p-2.5 bg-indigo-50 border border-indigo-100 text-indigo-800 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500" value={settings.examType || '一般'} onChange={e => { const s = {...settings, examType: e.target.value}; setSettings(s); saveSettingsToCloud(s); }}>
-                                            <option value="一般">平時/一般評量週報 (隱藏排名)</option>
-                                            <option value="段考">定期段考 (顯示班/校排)</option>
-                                            <option value="模擬考">模擬考 (顯示班/校排)</option>
-                                        </select>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-500 mb-1">本次考試類型</label>
+                                            <select className="w-full p-2 bg-indigo-50 border border-indigo-100 text-indigo-800 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500" value={settings.examType || '一般'} onChange={e => { const s = {...settings, examType: e.target.value}; setSettings(s); saveSettingsToCloud(s); }}>
+                                                <option value="一般">平時測驗(隱藏排名)</option>
+                                                <option value="段考">段考(顯示班/校排)</option>
+                                                <option value="模擬考">模擬考(顯示排名)</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-500 mb-1">AI 診斷語氣</label>
+                                            <select className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-bold" value={settings.gradingTone} onChange={e => { const s = {...settings, gradingTone: e.target.value}; setSettings(s); saveSettingsToCloud(s); }}>
+                                                <option value="溫和鼓勵">溫和鼓勵 🌸</option>
+                                                <option value="積極督促">積極督促 ⚡</option>
+                                                <option value="嚴格警示">嚴格警示 🔥</option>
+                                            </select>
+                                        </div>
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 mb-1">AI 診斷語氣</label>
-                                        <select className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm font-bold" value={settings.gradingTone} onChange={e => { const s = {...settings, gradingTone: e.target.value}; setSettings(s); saveSettingsToCloud(s); }}>
-                                            <option value="溫和鼓勵">溫和鼓勵 🌸</option>
-                                            <option value="積極督促">積極督促 ⚡</option>
-                                            <option value="嚴格警示">嚴格警示 🔥</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 mb-1">列印總備註內容</label>
-                                        <textarea rows="3" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs" value={settings.printRemark} onChange={e => { const s = {...settings, printRemark: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} />
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-1">列印總備註內容</label>
+                                        <textarea rows="2" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs" value={settings.printRemark} onChange={e => { const s = {...settings, printRemark: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} />
                                     </div>
 
                                     <div className="border-t pt-3 flex flex-col gap-3">
@@ -974,56 +980,91 @@
                                             <button onClick={downloadSubjectTemplate} className="text-[10px] text-blue-600 underline font-bold">下載批次匯入範本</button>
                                         </div>
                                         
-                                        <button onClick={() => subjectFileInputRef.current.click()} className="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 py-2 rounded-xl text-xs font-bold transition flex justify-center items-center gap-2">
-                                            <span>📤</span> Excel 批次匯入考科與範圍
-                                        </button>
-                                        <input type="file" ref={subjectFileInputRef} className="hidden" accept=".xlsx, .csv" onChange={e => handleSubjectExcelUpload(e.target.files[0])} />
-
                                         <div className="bg-slate-50 p-3 rounded-2xl border flex flex-col gap-2 text-xs">
-                                            <select className="w-full p-2 bg-white border rounded-lg" value={newSubjectName} onChange={e => { setNewSubjectName(e.target.value); if(e.target.value!=='自訂') setCustomSubjectName(''); }}>
-                                                <option value="國文">國文</option><option value="英文">英文</option><option value="數學">數學</option>
-                                                <option value="理化">理化</option><option value="歷史">歷史</option><option value="地理">地理</option>
-                                                <option value="公民">公民</option><option value="生物">生物</option><option value="自訂">➕ 自訂考科...</option>
-                                            </select>
-                                            {newSubjectName === '自訂' && <input type="text" placeholder="自訂名稱" className="w-full p-2 bg-white border rounded-lg" value={customSubjectName} onChange={e => setCustomSubjectName(e.target.value)} />}
                                             <div className="flex gap-2">
-                                                <input type="text" placeholder="範圍(例:CH1-2)" className="w-full p-2 bg-white border rounded-lg" value={newSubjectScope} onChange={e => setNewSubjectScope(e.target.value)} />
-                                                <input type="text" placeholder="日期(07/05)" className="w-full p-2 bg-white border rounded-lg text-center" value={newSubjectDate} onChange={e => setNewSubjectDate(e.target.value)} />
+                                                {newSubjectName === '自訂' ? (
+                                                    <div className="w-1/3 flex border rounded-lg bg-white overflow-hidden items-center">
+                                                        <input type="text" placeholder="自訂名稱" className="w-full p-2 text-xs outline-none" value={customSubjectName} onChange={e => setCustomSubjectName(e.target.value)} />
+                                                        <button onClick={() => {setNewSubjectName('英文'); setCustomSubjectName('');}} className="px-1.5 text-slate-400 hover:bg-slate-100 font-bold" title="取消自訂">✕</button>
+                                                    </div>
+                                                ) : (
+                                                    <select className="w-1/3 p-2 bg-white border rounded-lg text-xs font-medium" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)}>
+                                                        <option value="國文">國文</option><option value="英文">英文</option><option value="數學">數學</option>
+                                                        <option value="理化">理化</option><option value="歷史">歷史</option><option value="地理">地理</option>
+                                                        <option value="公民">公民</option><option value="生物">生物</option><option value="自訂">➕ 自訂</option>
+                                                    </select>
+                                                )}
+                                                <input type="text" placeholder="範圍(例:CH1)" className="w-1/3 p-2 bg-white border rounded-lg" value={newSubjectScope} onChange={e => setNewSubjectScope(e.target.value)} />
+                                                <input type="text" placeholder="日期(07/05)" className="w-1/3 p-2 bg-white border rounded-lg text-center" value={newSubjectDate} onChange={e => setNewSubjectDate(e.target.value)} />
                                             </div>
-                                            <button onClick={handleAddSubject} className="bg-[#00704A] text-white py-2 rounded-lg font-bold">手動新增單一科目</button>
+                                            
+                                            <div className="grid grid-cols-2 gap-2 mt-1">
+                                                <button onClick={() => subjectFileInputRef.current.click()} className="bg-slate-200 hover:bg-slate-300 border border-slate-300 text-slate-700 py-2 rounded-lg font-bold transition flex justify-center items-center gap-1 text-[11px]">
+                                                    <span>📤</span> 批次匯入考科
+                                                </button>
+                                                <input type="file" ref={subjectFileInputRef} className="hidden" accept=".xlsx, .csv" onChange={e => handleSubjectExcelUpload(e.target.files[0])} />
+                                                <button onClick={handleAddSubject} className="bg-[#00704A] hover:bg-[#005a3c] text-white py-2 rounded-lg font-bold transition text-[11px]">
+                                                    ➕ 新增單一科目
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-2xl border text-xs max-h-[180px] overflow-y-auto">
                                             {settings.subjects.map(sub => (
-                                                <div key={sub.name} className="flex justify-between items-center py-1 hover:bg-slate-100 px-1.5 rounded">
-                                                    <div className="flex items-center gap-1 flex-1 min-w-0 mr-2">
-                                                        <button onClick={() => handleDeleteSubject(sub.name)} className="text-rose-500 mr-1">❌</button>
-                                                        <div className="truncate">
-                                                            <span className="font-bold">{sub.name}</span> <span className="text-[9px] text-slate-400">({sub.date})</span>
-                                                            <p className="text-[9px] text-slate-500 truncate">{sub.scope}</p>
+                                                editingSubjectConfig?.originalName === sub.name ? (
+                                                    <div key={sub.name} className="flex flex-col gap-2 p-2 bg-indigo-50 rounded border border-indigo-100">
+                                                        <div className="font-bold text-indigo-800 text-xs">✏️ 修改：{sub.name}</div>
+                                                        <div className="flex gap-2">
+                                                            <input type="text" className="flex-1 p-1.5 border rounded text-xs" placeholder="範圍" value={editingSubjectConfig.scope} onChange={e => setEditingSubjectConfig({...editingSubjectConfig, scope: e.target.value})} />
+                                                            <input type="text" className="w-20 p-1.5 border rounded text-xs text-center" placeholder="日期" value={editingSubjectConfig.date} onChange={e => setEditingSubjectConfig({...editingSubjectConfig, date: e.target.value})} />
+                                                        </div>
+                                                        <div className="flex justify-end gap-2">
+                                                            <button onClick={() => setEditingSubjectConfig(null)} className="px-2 py-1 text-slate-500 hover:bg-slate-200 rounded font-bold">取消</button>
+                                                            <button onClick={() => {
+                                                                const newSubjects = settings.subjects.map(s => s.name === sub.name ? { ...s, scope: editingSubjectConfig.scope, date: editingSubjectConfig.date } : s);
+                                                                const newSettings = { ...settings, subjects: newSubjects };
+                                                                setSettings(newSettings);
+                                                                saveSettingsToCloud(newSettings);
+                                                                setEditingSubjectConfig(null);
+                                                            }} className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold transition">💾 儲存修改</button>
                                                         </div>
                                                     </div>
-                                                    <label className="flex items-center gap-1 cursor-pointer shrink-0">
-                                                        <input type="checkbox" checked={sub.locked} className="rounded text-rose-600" onChange={e => {
-                                                            const s = {...settings, subjects: settings.subjects.map(x => x.name === sub.name ? {...x, locked: e.target.checked} : x)};
-                                                            setSettings(s); saveSettingsToCloud(s);
-                                                        }} />
-                                                        <span className={sub.locked ? "text-rose-600 font-bold text-[10px]" : "text-emerald-600 font-bold text-[10px]"}>{sub.locked ? "鎖" : "填"}</span>
-                                                    </label>
-                                                </div>
+                                                ) : (
+                                                    <div key={sub.name} className="flex justify-between items-center py-1 hover:bg-slate-100 px-1.5 rounded transition-colors">
+                                                        <div className="flex items-center gap-1 flex-1 min-w-0 mr-2">
+                                                            <button onClick={() => handleDeleteSubject(sub.name)} className="text-rose-500 hover:text-rose-700 mr-1 shrink-0" title="刪除科目">❌</button>
+                                                            <button onClick={() => setEditingSubjectConfig({ originalName: sub.name, scope: sub.scope, date: sub.date })} className="text-blue-500 hover:text-blue-700 mr-1 shrink-0" title="修改範圍與日期">📝</button>
+                                                            <div className="truncate">
+                                                                <span className="font-bold">{sub.name}</span> <span className="text-[9px] text-slate-400">({sub.date})</span>
+                                                                <p className="text-[9px] text-slate-500 truncate">{sub.scope}</p>
+                                                            </div>
+                                                        </div>
+                                                        <label className="flex items-center gap-1 cursor-pointer shrink-0" title="勾選後學生將無法自行修改成績">
+                                                            <input type="checkbox" checked={sub.locked} className="rounded text-rose-600 focus:ring-rose-500" onChange={e => {
+                                                                const s = {...settings, subjects: settings.subjects.map(x => x.name === sub.name ? {...x, locked: e.target.checked} : x)};
+                                                                setSettings(s); saveSettingsToCloud(s);
+                                                            }} />
+                                                            <span className={sub.locked ? "text-rose-600 font-bold text-[10px]" : "text-emerald-600 font-bold text-[10px]"}>{sub.locked ? "已鎖定" : "開放填寫"}</span>
+                                                        </label>
+                                                    </div>
+                                                )
                                             ))}
                                             {settings.subjects.length === 0 && <p className="text-center text-slate-400 py-2">目前沒有設定任何考科</p>}
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2 border-t pt-3">
-                                        {['TotalAvg:顯示總平均', 'GradeLevel:顯示級距', 'ClassAvg:顯示班平均', 'Progress:顯示進步分', 'enableComments:啟用AI診斷'].map(opt => {
+                                    <div className="grid grid-cols-2 gap-y-3 gap-x-2 border-t pt-3">
+                                        {['TotalAvg:顯示總平均', 'GradeLevel:顯示級距', 'ClassAvg:顯示班平均', 'Progress:顯示進步分', 'RadarChart:顯示雷達圖', 'enableComments:啟用AI診斷'].map(opt => {
                                             const [key, label] = opt.split(':');
-                                            const prop = key === 'TotalAvg' ? 'showTotalAvg' : key === 'GradeLevel' ? 'showGradeLevel' : key === 'ClassAvg' ? 'showClassAvg' : key === 'Progress' ? 'showProgress' : 'enableComments';
+                                            const prop = key === 'TotalAvg' ? 'showTotalAvg' : 
+                                                         key === 'GradeLevel' ? 'showGradeLevel' : 
+                                                         key === 'ClassAvg' ? 'showClassAvg' : 
+                                                         key === 'Progress' ? 'showProgress' : 
+                                                         key === 'RadarChart' ? 'showRadarChart' : 'enableComments';
                                             return (
-                                                <label key={prop} className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-600">
-                                                    <input type="checkbox" checked={settings[prop]} onChange={e => { const s = {...settings, [prop]: e.target.checked}; setSettings(s); saveSettingsToCloud(s); }} className="rounded text-[#00704A]" />
-                                                    <span>{label}</span>
+                                                <label key={prop} className="flex items-center gap-2 cursor-pointer text-[11px] font-bold text-slate-600">
+                                                    <input type="checkbox" checked={settings[prop] !== false} onChange={e => { const s = {...settings, [prop]: e.target.checked}; setSettings(s); saveSettingsToCloud(s); }} className="rounded text-[#00704A] w-3.5 h-3.5 focus:ring-0" />
+                                                    <span className="truncate">{label}</span>
                                                 </label>
                                             )
                                         })}
@@ -1039,10 +1080,10 @@
                                         <h4 className="font-bold text-sm">拖放 Excel 批次匯入【學生名單與成績】</h4>
                                         <p className="text-[10px] text-slate-500 mt-1">支援班排、校排等進階欄位，可當週報更新</p>
                                         <div className="flex flex-wrap gap-2 mt-4 justify-center">
-                                            <button onClick={() => fileInputRef.current.click()} className="bg-[#00704A] text-white text-xs px-3.5 py-2 rounded-xl">選取檔案</button>
-                                            <button onClick={downloadStudentTemplate} className="bg-emerald-100 text-[#00704A] font-bold text-xs px-3.5 py-2 rounded-xl">📥 下載範本</button>
-                                            <button onClick={clearDatabase} className="bg-slate-100 text-slate-600 text-xs px-3.5 py-2 rounded-xl border">清空資料</button>
-                                            <button onClick={exportGradesToCSV} className="bg-blue-600 text-white text-xs px-3.5 py-2 rounded-xl">💾 匯出 Excel</button>
+                                            <button onClick={() => fileInputRef.current.click()} className="bg-[#00704A] hover:bg-[#005a3c] text-white text-xs px-4 py-2 rounded-xl font-bold transition shadow-md">📤 匯入名單與成績</button>
+                                            <button onClick={downloadStudentTemplate} className="bg-emerald-100 hover:bg-emerald-200 text-[#00704A] font-bold text-xs px-3.5 py-2 rounded-xl transition">📥 下載範本</button>
+                                            <button onClick={clearDatabase} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-3.5 py-2 rounded-xl border transition">清空資料</button>
+                                            <button onClick={exportGradesToCSV} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">💾 匯出 Excel</button>
                                         </div>
                                         <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .csv" onChange={e => handleExcelUpload(e.target.files[0])} />
                                     </div>
@@ -1244,6 +1285,9 @@
     </script>
 </body>
 </html>
+
+
+
 
 
 
