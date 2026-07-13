@@ -88,7 +88,25 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        // ================= 自動切換環境設定 =================
+        let firebaseConfig;
+        
+        // 判斷：如果在 Gemini 測試環境，就使用系統注入的臨時變數
+        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+            firebaseConfig = JSON.parse(__firebase_config);
+        } else {
+            // 在 GitHub Pages 或本地端，使用您的專屬 Firebase 金鑰
+            firebaseConfig = {
+                apiKey: "AIzaSyCBWQlxFEjio3mE5TSl5X6Ng_c1drXwcF0",
+                authDomain: "class-report-3191c.firebaseapp.com",
+                projectId: "class-report-3191c",
+                storageBucket: "class-report-3191c.firebasestorage.app",
+                messagingSenderId: "1077190697392",
+                appId: "1:1077190697392:web:ca99c2cfdc157cdf393675",
+                measurementId: "G-PMEH4L01SR"
+            };
+        }
+        // ====================================================
         
         let app, db, auth;
         try {
@@ -114,7 +132,8 @@
             const [firebaseUser, setFirebaseUser] = useState(null);
             
             // 確保 appId 絕對不為空字串，避免 Firebase 路徑解析錯誤
-            const appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'default-app-id';
+            // 這裡加入自動判斷：Gemini 環境用內建 ID，GitHub 用自訂的固定 ID
+            const appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'class-315-system'; 
             const basePath = `artifacts/${appId}/public/data`;
             
             // 系統模式與頁面
@@ -140,7 +159,6 @@
             const [loginData, setLoginData] = useState({ seatNo: '', password: '' });
             const [teacherPass, setTeacherPass] = useState('');
             const [showTeacherModal, setShowTeacherModal] = useState(false);
-            const [showPassword, setShowPassword] = useState(false);
             
             const [editingSubject, setEditingSubject] = useState(null);
             const [editForm, setEditForm] = useState({ score: '' });
@@ -205,9 +223,9 @@
             // ================= 監聽資料庫 =================
             useEffect(() => {
                 if (!firebaseReady || !firebaseUser) return;
-                const { db, collection, doc, onSnapshot } = window.firebaseAPI;
+                const { db, onSnapshot, doc, collection } = window.firebaseAPI;
 
-                // 改用絕對路徑寫法
+                // 改用絕對路徑寫法，避免 Firebase 解析陣列時出錯
                 const settingsRef = doc(db, `${basePath}/settings/global`);
                 const unsubSettings = onSnapshot(settingsRef, (snap) => {
                     if (snap.exists()) {
@@ -235,7 +253,7 @@
                 }, (error) => console.error("學生資料讀取失敗:", error));
 
                 return () => { unsubSettings(); unsubStudents(); };
-            }, [firebaseReady, firebaseUser, appId, currentStudent?.id]);
+            }, [firebaseReady, firebaseUser, basePath, currentStudent?.id]);
 
             // ================= 工具函數 =================
             const showToast = (text, type = 'success') => {
@@ -520,45 +538,43 @@
                 if (!firebaseUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
 
                 const class315List = [
-                    { id: "student_1", seatNo: "1", name: "方煒翔", password: "A01", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_2", seatNo: "2", name: "何家均", password: "A02", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_3", seatNo: "3", name: "周科呈", password: "A03", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_4", seatNo: "4", name: "周晉源", password: "A04", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_5", seatNo: "5", name: "邱文廷", password: "A05", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_6", seatNo: "6", name: "施畯紳", password: "A06", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_8", seatNo: "8", name: "曾繁夏", password: "A08", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_9", seatNo: "9", name: "黃哲逵", password: "A09", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_10", seatNo: "10", name: "楊仲宇", password: "A10", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_11", seatNo: "11", name: "蔡侑庭", password: "A11", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_12", seatNo: "12", name: "蔡承育", password: "A12", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_13", seatNo: "13", name: "蕭敬哲", password: "A13", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_14", seatNo: "14", name: "謝明軒", password: "A14", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_15", seatNo: "15", name: "簡子傑", password: "A15", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_16", seatNo: "16", name: "顏方胤", password: "A16", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_17", seatNo: "17", name: "方幼奾", password: "A17", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_18", seatNo: "18", name: "林鎮汝", password: "A18", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_19", seatNo: "19", name: "洪茗品", password: "A19", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_20", seatNo: "20", name: "洪毓婕", password: "A20", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_21", seatNo: "21", name: "莊詠晴", password: "A21", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_22", seatNo: "22", name: "許庭旖", password: "A22", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_23", seatNo: "23", name: "陳薏帆", password: "A23", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_24", seatNo: "24", name: "黃奕臻", password: "A24", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_25", seatNo: "25", name: "黃翊瑄", password: "A25", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_26", seatNo: "26", name: "葉昕潔", password: "A26", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_27", seatNo: "27", name: "蕭伊婷", password: "A27", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_28", seatNo: "28", name: "薛丞妤", password: "A28", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_29", seatNo: "29", name: "蘇沛紜", password: "A29", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
-                    { id: "student_30", seatNo: "30", name: "周品瑜", password: "A30", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} }
+                    { id: "student_1", seatNo: "1", name: "方煒翔", password: "1", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_2", seatNo: "2", name: "何家均", password: "2", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_3", seatNo: "3", name: "周科呈", password: "3", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_4", seatNo: "4", name: "周晉源", password: "4", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_5", seatNo: "5", name: "邱文廷", password: "5", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_6", seatNo: "6", name: "施畯紳", password: "6", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_8", seatNo: "8", name: "曾繁夏", password: "8", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_9", seatNo: "9", name: "黃哲逵", password: "9", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_10", seatNo: "10", name: "楊仲宇", password: "10", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_11", seatNo: "11", name: "蔡侑庭", password: "11", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_12", seatNo: "12", name: "蔡承育", password: "12", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_13", seatNo: "13", name: "蕭敬哲", password: "13", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_14", seatNo: "14", name: "謝明軒", password: "14", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_15", seatNo: "15", name: "簡子傑", password: "15", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_16", seatNo: "16", name: "顏方胤", password: "16", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_17", seatNo: "17", name: "方幼奾", password: "17", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_18", seatNo: "18", name: "林鎮汝", password: "18", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_19", seatNo: "19", name: "洪茗品", password: "19", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_20", seatNo: "20", name: "洪毓婕", password: "20", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_21", seatNo: "21", name: "莊詠晴", password: "21", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_22", seatNo: "22", name: "許庭旖", password: "22", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_23", seatNo: "23", name: "陳薏帆", password: "23", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_24", seatNo: "24", name: "黃奕臻", password: "24", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_25", seatNo: "25", name: "黃翊瑄", password: "25", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_26", seatNo: "26", name: "葉昕潔", password: "26", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_27", seatNo: "27", name: "蕭伊婷", password: "27", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_28", seatNo: "28", name: "薛丞妤", password: "28", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_29", seatNo: "29", name: "蘇沛紜", password: "29", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
+                    { id: "student_30", seatNo: "30", name: "周品瑜", password: "30", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} }
                 ];
 
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
                     let count = 0;
-                    for (const s of class315List) {
-                        await setDoc(doc(db, `${basePath}/submissions/${s.id}`), s);
-                        count++;
-                    }
-                    showToast(`✅ 成功載入 315 班 ${count} 位正式學生名單！`);
+                    // 使用 Promise.all 加速匯入
+                    await Promise.all(class315List.map(s => setDoc(doc(db, `${basePath}/submissions/${s.id}`), s)));
+                    showToast(`✅ 成功載入 315 班 ${class315List.length} 位正式學生名單！`);
                 } catch (e) {
                     showToast("載入名單失敗：" + e.message, "error");
                 }
@@ -1128,7 +1144,7 @@
                                         <p className="text-[10px] text-slate-500 mt-1">支援班排、校排等進階欄位，可當週報更新</p>
                                         <div className="flex flex-wrap gap-2 mt-4 justify-center">
                                             <button onClick={() => fileInputRef.current.click()} className="bg-[#00704A] hover:bg-[#005a3c] text-white text-xs px-4 py-2 rounded-xl font-bold transition shadow-md">📤 匯入名單與成績</button>
-                                            <button onClick={loadDemoData} className="bg-[#CBA258] hover:bg-[#b08b45] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-md">一鍵載入315正式名單</button>
+                                            <button onClick={loadDemoData} className="bg-[#CBA258] hover:bg-[#b08b45] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-md">一鍵載入正式名單</button>
                                             <button onClick={downloadStudentTemplate} className="bg-emerald-100 hover:bg-emerald-200 text-[#00704A] font-bold text-xs px-3.5 py-2 rounded-xl transition">📥 下載範本</button>
                                             <button onClick={clearDatabase} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-3.5 py-2 rounded-xl border transition">清空資料</button>
                                             <button onClick={exportGradesToCSV} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">💾 匯出 Excel</button>
@@ -1328,3 +1344,5 @@
     </script>
 </body>
 </html>
+
+
