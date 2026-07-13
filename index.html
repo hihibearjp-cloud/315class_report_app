@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>315 學生班級成績通知系統</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -181,6 +181,10 @@
             const subjectFileInputRef = useRef(null);
             const backupFileInputRef = useRef(null);
 
+            // 隱藏彩蛋：左上角計擊計數器
+            const logoClickCount = useRef(0);
+            const logoClickTimer = useRef(null);
+
             // ================= Firebase 初始化與驗證 =================
             useEffect(() => {
                 if (!window.firebaseAPI?.auth) {
@@ -208,7 +212,6 @@
                             await signInAnonymously(auth);
                         } catch (fallbackErr) {
                             console.error("備用連線也失敗:", fallbackErr);
-                            showToast("系統連線異常，請嘗試重新整理網頁。", "error");
                         }
                     }
                 };
@@ -222,7 +225,9 @@
 
             // ================= 監聽資料庫 =================
             useEffect(() => {
-                if (!firebaseReady || !firebaseUser) return;
+                // 🚀 關鍵修復：即使登入驗證延遲，也立刻監聽資料庫，不讓畫面卡住！
+                if (!firebaseReady) return; 
+                
                 const { db, onSnapshot, doc, collection } = window.firebaseAPI;
 
                 // 改用絕對路徑寫法，避免 Firebase 解析陣列時出錯
@@ -253,7 +258,7 @@
                 }, (error) => console.error("學生資料讀取失敗:", error));
 
                 return () => { unsubSettings(); unsubStudents(); };
-            }, [firebaseReady, firebaseUser, basePath, currentStudent?.id]);
+            }, [firebaseReady, basePath, currentStudent?.id]);
 
             // ================= 工具函數 =================
             const showToast = (text, type = 'success') => {
@@ -262,7 +267,7 @@
             };
 
             const saveSettingsToCloud = async (newSettings) => {
-                if (!firebaseUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
+                // 🚀 移除身分檢查，讓存檔更順暢
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
                     await setDoc(doc(db, `${basePath}/settings/global`), newSettings);
@@ -346,11 +351,37 @@
                 }
             };
 
+            // ================= 姓名去識別化功能 =================
+            const maskName = (name) => {
+                if (!name) return "";
+                const strName = String(name).trim();
+                const len = strName.length;
+                if (len <= 1) return strName;
+                if (len === 2) return strName.charAt(0) + 'O';
+                // 頭尾保留，中間字元皆換成 O
+                return strName.charAt(0) + 'O'.repeat(len - 2) + strName.charAt(len - 1);
+            };
+
+            // ================= 點擊三下觸發教師登入的隱藏機關 =================
+            const handleSecretTeacherLogin = () => {
+                logoClickCount.current += 1;
+                clearTimeout(logoClickTimer.current);
+                
+                if (logoClickCount.current >= 3) {
+                    setShowTeacherModal(true);
+                    logoClickCount.current = 0; // 重置計數器
+                } else {
+                    // 如果 0.6 秒內沒有點滿 3 下，就自動歸零
+                    logoClickTimer.current = setTimeout(() => {
+                        logoClickCount.current = 0;
+                    }, 600); 
+                }
+            };
+
             // ================= 共用匯入寫入邏輯 =================
             const processExcelOrCsv = (file, callback) => {
                 if (!file) return;
-                if (!firebaseUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
-
+                
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     try {
@@ -382,6 +413,10 @@
                     const seat = String(row['座號'] || String(idx+1)).trim();
                     const existingStudent = students.find(s => s.seatNo === seat);
                     
+                    // 取出姓名並進行打 O 遮蔽處理
+                    const rawName = String(row['姓名'] || (existingStudent ? existingStudent.name : `同學 ${idx+1}`)).trim();
+                    const maskedName = maskName(rawName);
+
                     const studentScores = { ...(existingStudent?.scores || {}) };
                     settings.subjects.forEach(sub => {
                         if (row[sub.name] !== undefined && row[sub.name] !== '') {
@@ -392,7 +427,7 @@
                     return {
                         id: `student_${seat}`,
                         seatNo: seat,
-                        name: String(row['姓名'] || (existingStudent ? existingStudent.name : `同學 ${idx+1}`)).trim(),
+                        name: maskedName,
                         password: row['密碼'] !== undefined && row['密碼'] !== '' ? String(row['密碼']).trim() : (existingStudent ? existingStudent.password : seat), 
                         progress: row['進步分數'] !== undefined && row['進步分數'] !== '' ? parseFloat(row['進步分數']) : (existingStudent?.progress || 0),
                         loginCount: existingStudent?.loginCount || 0,
@@ -406,7 +441,7 @@
 
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
-                    // 使用 Promise.all 進行平行寫入，改用絕對路徑
+                    // 🚀 使用 Promise.all 進行平行寫入，改用絕對路徑，瞬間完成匯入
                     await Promise.all(parsedStudents.map(s => setDoc(doc(db, `${basePath}/submissions/${s.id}`), s)));
                     showToast(`✅ 成功匯入更新 ${parsedStudents.length} 筆學生資料與成績！`);
                 } catch (err) {
@@ -512,8 +547,7 @@
 
             const importBackupJSON = (file) => {
                 if (!file) return;
-                if (!firebaseUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
-
+                
                 const reader = new FileReader();
                 reader.onload = async (e) => {
                     try {
@@ -535,8 +569,6 @@
 
             // ================= 載入 315 班正式名單 =================
             const loadDemoData = async () => {
-                if (!firebaseUser) return showToast("資料庫連線中，請稍候片刻...", "warning");
-
                 const class315List = [
                     { id: "student_1", seatNo: "1", name: "方煒翔", password: "1", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
                     { id: "student_2", seatNo: "2", name: "何家均", password: "2", progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} },
@@ -572,8 +604,11 @@
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
                     let count = 0;
-                    // 使用 Promise.all 加速匯入
-                    await Promise.all(class315List.map(s => setDoc(doc(db, `${basePath}/submissions/${s.id}`), s)));
+                    // 使用 Promise.all 加速匯入，並套用姓名去識別化
+                    await Promise.all(class315List.map(s => {
+                        const maskedStudent = { ...s, name: maskName(s.name) };
+                        return setDoc(doc(db, `${basePath}/submissions/${maskedStudent.id}`), maskedStudent);
+                    }));
                     showToast(`✅ 成功載入 315 班 ${class315List.length} 位正式學生名單！`);
                 } catch (e) {
                     showToast("載入名單失敗：" + e.message, "error");
@@ -651,20 +686,21 @@
 
             const handleAddStudent = async () => {
                 const seat = String(newStudentData.seatNo).trim();
-                const name = String(newStudentData.name).trim();
+                const rawName = String(newStudentData.name).trim();
                 const pwd = String(newStudentData.password).trim() || seat;
 
-                if (!seat || !name) return showToast("請填寫座號與姓名！", "error");
+                if (!seat || !rawName) return showToast("請填寫座號與姓名！", "error");
                 if (students.some(s => String(s.seatNo).trim() === seat)) return showToast("座號重複！", "error");
 
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
                     const newId = `student_${seat}`;
-                    const studentObj = { id: newId, seatNo: seat, name, password: pwd, progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} };
+                    const maskedName = maskName(rawName);
+                    const studentObj = { id: newId, seatNo: seat, name: maskedName, password: pwd, progress: 0, loginCount: 0, classRank: null, classRankProgress: null, schoolRank: null, schoolRankProgress: null, scores: {} };
                     await setDoc(doc(db, `${basePath}/submissions/${newId}`), studentObj);
                     setNewStudentData({ seatNo: '', name: '', password: '' });
                     setShowAddStudent(false);
-                    showToast(`學生 ${name} 新增成功！`);
+                    showToast(`學生 ${maskedName} 新增成功！`);
                 } catch (e) { showToast("新增失敗：" + e.message, "error"); }
             };
 
@@ -679,10 +715,14 @@
 
             const saveModifiedStudent = async () => {
                 if (!modifyingStudent) return;
-                if (!modifyingStudent.name.trim()) return showToast("姓名不能為空！", "error");
+                const rawName = String(modifyingStudent.name || '').trim();
+                if (!rawName) return showToast("姓名不能為空！", "error");
+                
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
-                    await setDoc(doc(db, `${basePath}/submissions/${modifyingStudent.id}`), modifyingStudent);
+                    // 同步做姓名去識別化防護
+                    const updatedData = { ...modifyingStudent, name: maskName(rawName) };
+                    await setDoc(doc(db, `${basePath}/submissions/${updatedData.id}`), updatedData);
                     setModifyingStudent(null);
                     showToast("學生資訊已更新！");
                 } catch (e) { showToast("儲存失敗：" + e.message, "error"); }
@@ -923,17 +963,21 @@
 
                     <nav className="no-print bg-[#1E3932] text-[#F3EFE0] px-6 py-4 shadow-xl flex justify-between items-center z-40 relative">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-[#00704A] flex items-center justify-center font-black text-white text-xl">{settings.className}</div>
+                            <div 
+                                onClick={handleSecretTeacherLogin}
+                                className="w-16 h-10 rounded-2xl bg-[#00704A] flex items-center justify-center font-black text-white text-xl select-none cursor-pointer hover:bg-[#005a3c] transition-colors"
+                                title=""
+                            >
+                                {settings.className}
+                            </div>
                             <div>
                                 <h1 className="text-lg font-bold tracking-wider">{settings.className} 成績查詢系統</h1>
                                 <p className="text-[10px] text-slate-300 font-medium">簡潔考科範圍與即時智慧學術診斷</p>
                             </div>
                         </div>
                         <div>
-                            {(viewMode === 'teacher-dashboard' || viewMode === 'batch-print') ? (
+                            {(viewMode === 'teacher-dashboard' || viewMode === 'batch-print') && (
                                 <button onClick={() => setViewMode('parent-login')} className="bg-slate-700/60 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition">🚪 退出後台</button>
-                            ) : (
-                                <button onClick={() => setShowTeacherModal(true)} className="bg-[#00704A] hover:bg-[#005a3c] text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1">🔑 教師管理</button>
                             )}
                         </div>
                     </nav>
@@ -1141,7 +1185,7 @@
                                     <div onDragOver={e=>{e.preventDefault();setExcelDragActive(true);}} onDragLeave={()=>setExcelDragActive(false)} onDrop={e=>{e.preventDefault();setExcelDragActive(false);handleFileUpload(e.dataTransfer.files[0]);}} className={`p-8 border-2 border-dashed rounded-[2rem] text-center flex flex-col items-center justify-center transition ${excelDragActive ? 'border-[#00704A] bg-emerald-50' : 'bg-white'}`}>
                                         <span className="text-4xl mb-2">🧑‍🎓</span>
                                         <h4 className="font-bold text-sm">拖放 Excel / CSV 批次匯入【名單與成績】</h4>
-                                        <p className="text-[10px] text-slate-500 mt-1">支援班排、校排等進階欄位，可當週報更新</p>
+                                        <p className="text-[10px] text-slate-500 mt-1">系統將自動保護學生姓名(例如：王O明)</p>
                                         <div className="flex flex-wrap gap-2 mt-4 justify-center">
                                             <button onClick={() => fileInputRef.current.click()} className="bg-[#00704A] hover:bg-[#005a3c] text-white text-xs px-4 py-2 rounded-xl font-bold transition shadow-md">📤 匯入名單與成績</button>
                                             <button onClick={loadDemoData} className="bg-[#CBA258] hover:bg-[#b08b45] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-md">一鍵載入正式名單</button>
@@ -1285,7 +1329,7 @@
                                         </div>
                                         <div className="overflow-y-auto pr-1 space-y-4">
                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl">
-                                                <div><label className="text-[10px] text-slate-500">姓名</label><input type="text" className="w-full p-2 border rounded-xl text-sm" value={modifyingStudent.name} onChange={e=>setModifyingStudent({...modifyingStudent, name:e.target.value})}/></div>
+                                                <div><label className="text-[10px] text-slate-500">姓名 (儲存自動遮蔽)</label><input type="text" className="w-full p-2 border rounded-xl text-sm" value={modifyingStudent.name} onChange={e=>setModifyingStudent({...modifyingStudent, name:e.target.value})}/></div>
                                                 <div><label className="text-[10px] text-slate-500">自訂登入密碼</label><input type="text" className="w-full p-2 border rounded-xl text-sm" value={modifyingStudent.password} onChange={e=>setModifyingStudent({...modifyingStudent, password:e.target.value})}/></div>
                                                 <div><label className="text-[10px] text-slate-500">總分進步分數</label><input type="number" className="w-full p-2 border rounded-xl text-sm" value={modifyingStudent.progress} onChange={e=>setModifyingStudent({...modifyingStudent, progress:parseFloat(e.target.value)||0})}/></div>
                                                 <div><label className="text-[10px] text-slate-500">手動歸零登入次數</label><button onClick={() => setModifyingStudent({...modifyingStudent, loginCount: 0})} className="w-full p-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-xs font-bold text-slate-600 mt-1">目前: {modifyingStudent.loginCount || 0} (點擊歸零)</button></div>
@@ -1327,7 +1371,7 @@
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" onClick={() => setShowTeacherModal(false)}>
                             <div className="bg-white w-full max-w-sm rounded-3xl p-6" onClick={e => e.stopPropagation()}>
                                 <h3 className="text-lg font-bold text-center mb-4">🔑 教師身分驗證</h3>
-                                <input type="password" placeholder="請輸入管理密碼 (預設: fxm315)" className="w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm mb-4" value={teacherPass} onChange={e => setTeacherPass(e.target.value)} onKeyDown={e => e.key==='Enter' && handleTeacherLoginOnMain()} />
+                                <input type="password" placeholder="請輸入管理密碼" className="w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm mb-4" value={teacherPass} onChange={e => setTeacherPass(e.target.value)} onKeyDown={e => e.key==='Enter' && handleTeacherLoginOnMain()} />
                                 <div className="flex gap-2">
                                     <button onClick={() => setShowTeacherModal(false)} className="flex-1 bg-slate-100 py-3 rounded-2xl text-sm">取消</button>
                                     <button onClick={handleTeacherLoginOnMain} className="flex-1 bg-[#00704A] text-white py-3 rounded-2xl text-sm font-bold">登入</button>
