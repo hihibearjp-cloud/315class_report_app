@@ -237,8 +237,8 @@
                         const cloudData = snap.data();
                         let rawSubjects = cloudData.subjects || [];
                         const normalizedSubjects = rawSubjects.map(sub => {
-                            if (typeof sub === 'string') return { name: sub, date: "07/05", scope: "未設定範圍", locked: false };
-                            return { name: sub.name || "", date: sub.date || "未設定", scope: sub.scope || "未設定", locked: sub.locked || false };
+                            if (typeof sub === 'string') return { name: sub, date: "", scope: "未設定範圍", locked: false };
+                            return { name: sub.name || "", date: sub.date || "", scope: sub.scope || "未設定", locked: sub.locked || false };
                         });
                         setSettings({ ...cloudData, subjects: normalizedSubjects, examType: cloudData.examType || "一般", showRadarChart: cloudData.showRadarChart ?? true });
                     }
@@ -267,7 +267,6 @@
             };
 
             const saveSettingsToCloud = async (newSettings) => {
-                // 🚀 移除身分檢查，讓存檔更順暢
                 try {
                     const { db, doc, setDoc } = window.firebaseAPI;
                     await setDoc(doc(db, `${basePath}/settings/global`), newSettings);
@@ -351,7 +350,8 @@
                 }
             };
 
-            // ================= 姓名去識別化功能 =================
+            // ================= 日期與姓名轉換輔助函數 =================
+            // 姓名去識別化
             const maskName = (name) => {
                 if (!name) return "";
                 const strName = String(name).trim();
@@ -360,6 +360,21 @@
                 if (len === 2) return strName.charAt(0) + 'O';
                 // 頭尾保留，中間字元皆換成 O
                 return strName.charAt(0) + 'O'.repeat(len - 2) + strName.charAt(len - 1);
+            };
+
+            // 確保日期字串可放入 <input type="date"> (需要 YYYY-MM-DD)
+            const toDateInputFormat = (d) => {
+                if (!d || d === '未設定') return '';
+                // 如果已經是 YYYY-MM-DD
+                if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+                // 如果是 Excel 常見的 MM/DD 或 YYYY/MM/DD
+                const parts = d.split(/[\/\-]/);
+                if (parts.length === 2) return `${new Date().getFullYear()}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}`;
+                if (parts.length === 3) {
+                    if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+                    if (parts[2].length === 4) return `${parts[2]}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}`;
+                }
+                return '';
             };
 
             // ================= 點擊三下觸發教師登入的隱藏機關 =================
@@ -461,7 +476,8 @@
                     const newSubjects = json.map(row => ({
                         name: String(row['科目'] || row['考科'] || '').trim(),
                         scope: String(row['範圍'] || row['考試範圍'] || '未設定').trim(),
-                        date: String(row['日期'] || row['考試日期'] || '未設定').trim(),
+                        // 批次匯入的日期保持原樣，不管是 MM/DD 還是 YYYY-MM-DD
+                        date: String(row['日期'] || row['考試日期'] || '').trim(),
                         locked: false
                     })).filter(s => s.name !== '');
 
@@ -520,7 +536,7 @@
 
             const downloadSubjectTemplate = () => {
                 let csvContent = "\uFEFF科目,範圍,日期\r\n";
-                csvContent += "國文,L1~L4,05/10\r\n英文,單字 100-200,05/10\r\n數學,第一章 函數,05/11\r\n";
+                csvContent += "國文,L1~L4,2024-05-10\r\n英文,單字 100-200,05/10\r\n數學,第一章 函數,2024-05-11\r\n";
                 
                 const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
                 const link = document.createElement("a");
@@ -735,7 +751,7 @@
 
                 const newSettings = { 
                     ...settings, 
-                    subjects: [...settings.subjects, { name, date: newSubjectDate.trim() || "07/05", scope: newSubjectScope.trim() || "未設定", locked: false }] 
+                    subjects: [...settings.subjects, { name, date: newSubjectDate.trim() || "", scope: newSubjectScope.trim() || "未設定", locked: false }] 
                 };
                 setSettings(newSettings);
                 saveSettingsToCloud(newSettings);
@@ -1088,10 +1104,10 @@
                                         </div>
                                         
                                         <div className="bg-slate-50 p-3 rounded-2xl border flex flex-col gap-2 text-xs">
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-2 items-center">
                                                 {newSubjectName === '自訂' ? (
                                                     <div className="w-1/3 flex border rounded-lg bg-white overflow-hidden items-center">
-                                                        <input type="text" placeholder="自訂名稱" className="w-full p-2 text-xs outline-none" value={customSubjectName} onChange={e => setCustomSubjectName(e.target.value)} />
+                                                        <input type="text" placeholder="名稱" className="w-full p-2 text-xs outline-none" value={customSubjectName} onChange={e => setCustomSubjectName(e.target.value)} />
                                                         <button onClick={() => {setNewSubjectName('英文'); setCustomSubjectName('');}} className="px-1.5 text-slate-400 hover:bg-slate-100 font-bold" title="取消自訂">✕</button>
                                                     </div>
                                                 ) : (
@@ -1102,7 +1118,7 @@
                                                     </select>
                                                 )}
                                                 <input type="text" placeholder="範圍(例:CH1)" className="w-1/3 p-2 bg-white border rounded-lg" value={newSubjectScope} onChange={e => setNewSubjectScope(e.target.value)} />
-                                                <input type="text" placeholder="日期(07/05)" className="w-1/3 p-2 bg-white border rounded-lg text-center" value={newSubjectDate} onChange={e => setNewSubjectDate(e.target.value)} />
+                                                <input type="date" className="w-1/3 p-2 bg-white border rounded-lg text-center" value={newSubjectDate} onChange={e => setNewSubjectDate(e.target.value)} />
                                             </div>
                                             
                                             <div className="grid grid-cols-2 gap-2 mt-1">
@@ -1123,7 +1139,7 @@
                                                         <div className="font-bold text-indigo-800 text-xs">✏️ 修改：{sub.name}</div>
                                                         <div className="flex gap-2">
                                                             <input type="text" className="flex-1 p-1.5 border rounded text-xs" placeholder="範圍" value={editingSubjectConfig.scope} onChange={e => setEditingSubjectConfig({...editingSubjectConfig, scope: e.target.value})} />
-                                                            <input type="text" className="w-20 p-1.5 border rounded text-xs text-center" placeholder="日期" value={editingSubjectConfig.date} onChange={e => setEditingSubjectConfig({...editingSubjectConfig, date: e.target.value})} />
+                                                            <input type="date" className="w-32 p-1.5 border rounded text-xs text-center" value={toDateInputFormat(editingSubjectConfig.date)} onChange={e => setEditingSubjectConfig({...editingSubjectConfig, date: e.target.value})} />
                                                         </div>
                                                         <div className="flex justify-end gap-2">
                                                             <button onClick={() => setEditingSubjectConfig(null)} className="px-2 py-1 text-slate-500 hover:bg-slate-200 rounded font-bold">取消</button>
@@ -1371,7 +1387,7 @@
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" onClick={() => setShowTeacherModal(false)}>
                             <div className="bg-white w-full max-w-sm rounded-3xl p-6" onClick={e => e.stopPropagation()}>
                                 <h3 className="text-lg font-bold text-center mb-4">🔑 教師身分驗證</h3>
-                                <input type="password" placeholder="請輸入管理密碼" className="w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm mb-4" value={teacherPass} onChange={e => setTeacherPass(e.target.value)} onKeyDown={e => e.key==='Enter' && handleTeacherLoginOnMain()} />
+                                <input type="password" placeholder="請輸入管理密碼 (預設: fxm315)" className="w-full bg-slate-50 border rounded-2xl px-4 py-3 text-sm mb-4" value={teacherPass} onChange={e => setTeacherPass(e.target.value)} onKeyDown={e => e.key==='Enter' && handleTeacherLoginOnMain()} />
                                 <div className="flex gap-2">
                                     <button onClick={() => setShowTeacherModal(false)} className="flex-1 bg-slate-100 py-3 rounded-2xl text-sm">取消</button>
                                     <button onClick={handleTeacherLoginOnMain} className="flex-1 bg-[#00704A] text-white py-3 rounded-2xl text-sm font-bold">登入</button>
