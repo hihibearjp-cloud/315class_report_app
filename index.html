@@ -28,17 +28,17 @@
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 回退至穩定的 React 17 -->
+    <!-- 穩定的 React 17 -->
     <script crossorigin src="https://unpkg.com/react@17.0.2/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@17.0.2/umd/react-dom.production.min.js"></script>
     
-    <!-- 回退至穩定的 Babel 6 -->
+    <!-- 穩定的 Babel 6 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.26.0/babel.min.js"></script>
     
     <!-- 載入 SheetJS (Excel 解析必備) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-    <!-- 回退至原本最穩定的 Firebase v8.10.1 版本 -->
+    <!-- 最穩定的 Firebase v8.10.1 版本 -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
@@ -94,7 +94,7 @@
         }
     </style>
 
-    <!-- 自動生成並注入 Apple App 圖示 -->
+    <!-- apple-touch-icon 圖示自動注入 -->
     <script>
         (function() {
             var svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"><defs><linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#4facfe"/><stop offset="50%" stop-color="#a18cd1"/><stop offset="100%" stop-color="#fbc2eb"/></linearGradient><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="15" flood-color="#000000" flood-opacity="0.2"/></filter><filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.15"/></filter></defs><rect width="1024" height="1024" fill="url(#bgGrad)"/><circle cx="880" cy="200" r="40" fill="rgba(255,255,255,0.2)" /><circle cx="150" cy="850" r="60" fill="rgba(255,255,255,0.15)" /><polygon points="380,120 420,200 340,200" fill="rgba(255,255,255,0.2)" transform="rotate(25, 380, 160)" /><text x="40" y="260" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="240" fill="#FFEA00" transform="rotate(-15, 160, 200)" filter="url(#shadow)" stroke="#FFFFFF" stroke-width="4">315</text><text x="512" y="640" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="380" fill="#ffffff" text-anchor="middle" filter="url(#shadow)">A+</text><text x="160" y="480" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="150" fill="rgba(255,255,255,0.8)" transform="rotate(-15, 160, 480)" filter="url(#soft-shadow)">+</text><text x="820" y="380" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="180" fill="rgba(255,255,255,0.7)" transform="rotate(20, 820, 380)" filter="url(#soft-shadow)">−</text><text x="240" y="820" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="160" fill="rgba(255,255,255,0.6)" transform="rotate(10, 240, 820)" filter="url(#soft-shadow)">×</text><text x="760" y="860" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="160" fill="rgba(255,255,255,0.9)" transform="rotate(-10, 760, 860)" filter="url(#soft-shadow)">÷</text><text x="700" y="160" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="120" fill="rgba(255,255,255,0.5)" transform="rotate(15, 700, 160)" filter="url(#soft-shadow)">B</text><text x="100" y="680" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="110" fill="rgba(255,255,255,0.4)" transform="rotate(-25, 100, 680)" filter="url(#soft-shadow)">C</text><text x="850" y="620" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="120" fill="rgba(255,255,255,0.8)" transform="rotate(-5, 850, 620)" filter="url(#soft-shadow)">100</text></svg>`;
@@ -125,7 +125,7 @@
 <body class="min-h-screen text-slate-800 flex flex-col">
     <div id="root"></div>
 
-    <!-- Firebase v8 初始化腳本 (完全退回您提供的原版) -->
+    <!-- Firebase v8 初始化腳本 -->
     <script>
         var firebaseConfig;
         if (typeof __firebase_config !== 'undefined' && __firebase_config) {
@@ -286,8 +286,9 @@
             }, [firebaseReady]);
 
             // ================= 監聽資料庫 =================
+            // 【修復核心點：移除對 firebaseUser 的強行阻擋，只要 FirebaseReady 便能全天候啟動資料庫串流讀取】
             useEffect(() => {
-                if (!firebaseReady || !firebaseUser) return; 
+                if (!firebaseReady) return; 
                 
                 const { db, onSnapshot, doc, collection } = window.firebaseAPI;
 
@@ -326,7 +327,7 @@
                 }, (error) => console.error("學生資料讀取失敗:", error));
 
                 return () => { unsubSettings(); unsubStudents(); };
-            }, [firebaseReady, firebaseUser, basePath]);
+            }, [firebaseReady, basePath]);
 
             // ================= 工具函數 =================
             const showToast = (text, type = 'success') => {
@@ -436,7 +437,6 @@
                 return '';
             };
 
-            // 安全開啟教師登入視窗
             const openTeacherLoginModal = (e) => {
                 if (e && e.preventDefault) e.preventDefault();
                 if (e && e.stopPropagation) e.stopPropagation();
@@ -445,7 +445,6 @@
 
             const handleSecretTeacherLogin = (e) => {
                 if (e && e.preventDefault) e.preventDefault();
-                if (e && e.stopPropagation) e.stopPropagation();
                 logoClickCount.current += 1;
                 clearTimeout(logoClickTimer.current);
                 
@@ -459,7 +458,7 @@
                 }
             };
 
-            // 【重點修正 1：驗證密碼強制為 FXM315，且大小寫不拘】
+            // 【重點修改 2：驗證密碼強制為 FXM315，且大小寫不拘】
             const handleTeacherLoginOnMain = () => {
                 const inputPwd = String(teacherPass).trim().toUpperCase();
                 if (inputPwd === 'FXM315') { 
@@ -1347,7 +1346,7 @@
                                     </div>
                                 </div>
 
-                                {/* Card 2: 考科與範圍設定 - 改為單一橫排佈局 */}
+                                {/* Card 2: 考科與範圍設定 (已改為單列水平佈局) */}
                                 <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xl flex flex-col gap-4">
                                     <div className="flex justify-between items-center border-b pb-2">
                                         <h4 className="font-bold flex items-center gap-2 text-slate-800"><span className="text-lg">📚</span> 考試項目設定</h4>
@@ -1366,7 +1365,7 @@
                                                 <label className="text-[10px] text-slate-500 font-bold">科目</label>
                                                 {newSubjectName === '自訂' ? (
                                                     <div className="flex border border-slate-300 rounded-lg bg-white overflow-hidden items-center focus-within:ring-2 focus-within:ring-emerald-500 h-[38px]">
-                                                        <input type="text" placeholder="例: 國防" className="w-full px-2 py-1.5 text-sm outline-none font-bold text-slate-700 bg-transparent" value={customSubjectName} onChange={e => setCustomSubjectName(e.target.value)} />
+                                                        <input type="text" placeholder="例: 國防" className="w-full px-2 py-1.5 text-sm outline-none font-bold text-slate-700 bg-transparent animate-fade-in" value={customSubjectName} onChange={e => setCustomSubjectName(e.target.value)} />
                                                         <button onClick={() => {setNewSubjectName('數學'); setCustomSubjectName('');}} className="px-2 text-slate-400 hover:bg-slate-100 font-bold bg-slate-50 border-l h-full" title="取消自訂">✕</button>
                                                     </div>
                                                 ) : (
@@ -1439,17 +1438,15 @@
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div key={sub.name} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3 px-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-colors">
+                                                    <div key={sub.name} className="flex flex-col py-3 px-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-colors">
                                                         <div className="flex flex-col min-w-0">
-                                                            <div className="flex items-baseline gap-2">
+                                                            <div className="flex items-baseline gap-2 flex-wrap">
                                                                 <span className="font-black text-slate-800 text-base">{sub.name}</span>
                                                                 <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{sub.date || '未設定日期'}</span>
                                                             </div>
                                                             <span className="text-sm text-slate-600 truncate mt-1">{sub.scope || '未設定範圍'}</span>
                                                         </div>
-                                                        
-                                                        <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto border-t sm:border-t-0 pt-2 sm:pt-0 mt-1 sm:mt-0">
-                                                            {/* 鎖定控制開關 */}
+                                                        <div className="flex items-center justify-between gap-3 w-full border-t pt-2 mt-2">
                                                             <label className="flex items-center gap-1.5 cursor-pointer shrink-0 bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-200">
                                                                 <input type="checkbox" checked={!sub.locked} className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4" onChange={e => {
                                                                     const newSubjects = settings.subjects.map(x => x && x.name === sub.name ? {...x, locked: !e.target.checked} : x);
@@ -1458,15 +1455,9 @@
                                                                 }} />
                                                                 <span className={sub.locked ? "text-rose-600 font-bold text-xs" : "text-emerald-600 font-bold text-xs"}>{sub.locked ? "鎖定" : "開放"}</span>
                                                             </label>
-
-                                                            {/* 修改與刪除按鈕 */}
                                                             <div className="flex gap-2">
-                                                                <button onClick={() => setEditingSubjectConfig({ originalName: sub.name, scope: sub.scope, date: sub.date })} className="flex items-center gap-1 text-blue-600 hover:bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg text-xs font-bold transition">
-                                                                    <span>✏️</span> 修改
-                                                                </button>
-                                                                <button onClick={() => handleDeleteSubject(sub.name)} className="flex items-center gap-1 text-rose-600 hover:bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg text-xs font-bold transition">
-                                                                    <span>🗑️</span> 刪除
-                                                                </button>
+                                                                <button onClick={() => setEditingSubjectConfig({ originalName: sub.name, scope: sub.scope, date: sub.date })} className="flex items-center gap-1 text-blue-600 hover:bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg text-xs font-bold transition"><span>✏️</span> 修改</button>
+                                                                <button onClick={() => handleDeleteSubject(sub.name)} className="flex items-center gap-1 text-rose-600 hover:bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg text-xs font-bold transition"><span>🗑️</span> 刪除</button>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1484,7 +1475,6 @@
                                 </div>
                             </div>
 
-                            {/* 右側學生名冊區 */}
                             <div className="flex-grow flex flex-col gap-5">
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                                     <div onDragOver={e => {e.preventDefault();setExcelDragActive(true);}} onDragLeave={() => {setExcelDragActive(false);}} onDrop={e => {e.preventDefault();setExcelDragActive(false);handleFileUpload(e.dataTransfer.files[0]);}} className={`p-8 border-2 border-dashed rounded-[2rem] text-center flex flex-col items-center justify-center transition ${excelDragActive ? 'border-[#00704A] bg-emerald-50' : 'bg-white'}`}>
@@ -1546,9 +1536,9 @@
                                 </div>
 
                                 <div className="bg-white rounded-[2rem] border shadow-xl overflow-hidden">
-                                    <div className="p-5 border-b flex justify-between items-center bg-slate-50">
+                                    <div className="p-5 border-b flex justify-between items-center bg-slate-50 flex-wrap gap-2">
                                         <h4 className="font-black flex items-center gap-2"><span>📋</span>班級名冊與成績總覽</h4>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 flex-wrap">
                                             <button onClick={openQuickScore} className="bg-[#00704A] hover:bg-[#005a3c] text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-md transition-all active:scale-95">✏️ 快速登記單科</button>
                                             <button onClick={() => setViewMode('batch-print')} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-md transition-all active:scale-95">🖨️ 列印全班成績單</button>
                                             <button onClick={() => setShowAddStudent(!showAddStudent)} className="bg-slate-200 text-slate-800 hover:bg-slate-300 text-xs font-bold px-3 py-1.5 rounded-xl transition">{showAddStudent ? "❌ 取消" : "➕ 新增單一學生"}</button>
@@ -1570,7 +1560,7 @@
                                         </div>
                                     )}
 
-                                    <div className="overflow-x-auto">
+                                    <div className="overflow-x-auto animate-fade-in">
                                         <table className="min-w-full text-center text-xs">
                                             <thead className="bg-slate-100">
                                                 <tr>
@@ -1624,149 +1614,12 @@
                                                         </td>
                                                     </tr>
                                                 ))}
-                                                {students.length === 0 && <tr><td colSpan="20" className="py-8 text-slate-400">目前沒有學生資料</td></tr>}
+                                                {students.length === 0 && <tr><td colSpan="20" className="py-8 text-slate-400 font-bold text-sm">目前無名單或尚在從雲端串流載入中...</td></tr>}
                                             </tbody>
                                         </table>
                                     </div>
                                 </div>
                             </div>
-
-                            {/* 快速輸入單科成績 (含貼上模式) Modal */}
-                            {showQuickScoreModal && (
-                                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4">
-                                    <div className="bg-white rounded-3xl w-full max-w-lg p-6 flex flex-col max-h-[90vh] shadow-2xl animate-fade-in border border-slate-100">
-                                        <div className="flex justify-between items-center border-b pb-3 mb-4">
-                                            <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><span>✏️</span> 快速登記單科成績</h3>
-                                            <button onClick={() => setShowQuickScoreModal(false)} className="text-slate-400 hover:text-slate-600 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold transition">✕ 關閉</button>
-                                        </div>
-                                        
-                                        <div className="mb-4 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
-                                            <label className="block text-xs font-bold text-emerald-800 mb-2">步驟 1：請選擇要登記的考試項目</label>
-                                            <select 
-                                                className="w-full p-3 border border-emerald-200 rounded-xl font-bold text-[#00704A] bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-[#00704A] text-sm"
-                                                value={quickScoreSubject}
-                                                onChange={e => handleQuickScoreSubjectChange(e.target.value)}
-                                            >
-                                                {settings.subjects.map(sub => (
-                                                    <option key={sub.name} value={sub.name}>👉 {sub.name} (範圍：{sub.scope || '未填'})</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <label className="block text-xs font-bold text-slate-500 mb-2">步驟 2：請選擇輸入方式</label>
-                                        
-                                        {/* 切換輸入模式 */}
-                                        <div className="flex bg-slate-100 p-1.5 rounded-xl mb-3 shrink-0">
-                                            <button className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${quickScoreMode === 'manual' ? 'bg-white shadow-sm text-[#00704A]' : 'text-slate-500 hover:text-slate-700'}`} onClick={() => setQuickScoreMode('manual')}>✏️ 逐一輸入</button>
-                                            <button className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${quickScoreMode === 'paste' ? 'bg-white shadow-sm text-[#00704A]' : 'text-slate-500 hover:text-slate-700'}`} onClick={() => setQuickScoreMode('paste')}>📋 從 Excel 貼上</button>
-                                        </div>
-
-                                        {/* 逐一輸入模式 */}
-                                        {quickScoreMode === 'manual' && (
-                                            <div className="flex-grow overflow-y-auto custom-scrollbar pr-3 space-y-2 bg-slate-50 p-3 rounded-2xl border border-slate-100 shadow-inner">
-                                                {students.map((s, i) => (
-                                                    <div key={s.id} className="flex justify-between items-center bg-white p-2.5 rounded-xl border border-slate-100 hover:border-emerald-300 transition-colors shadow-sm">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="w-8 h-8 flex items-center justify-center bg-emerald-100 text-[#00704A] rounded-full font-black text-xs">{s.seatNo}</span>
-                                                            <span className="font-bold text-sm text-slate-700">{s.name}</span>
-                                                        </div>
-                                                        <input 
-                                                            type="number" 
-                                                            min="0" max="100" step="any"
-                                                            placeholder="未登記"
-                                                            className="w-24 p-2 border border-slate-200 rounded-lg text-center text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#00704A] bg-slate-50 focus:bg-white transition-all"
-                                                            value={quickScoreData[s.id] !== undefined ? quickScoreData[s.id] : ''}
-                                                            onChange={e => { 
-                                                                const nd = { ...quickScoreData };
-                                                                nd[s.id] = e.target.value;
-                                                                setQuickScoreData(nd); 
-                                                            }}
-                                                            onFocus={e => e.target.select()}
-                                                            tabIndex={i + 1}
-                                                        />
-                                                    </div>
-                                                ))}
-                                                {students.length === 0 && <p className="text-center py-8 text-slate-400 text-sm">請先在左側或上方匯入學生名單</p>}
-                                            </div>
-                                        )}
-
-                                        {/* 從 Excel 貼上模式 */}
-                                        {quickScoreMode === 'paste' && (
-                                            <div className="flex-grow flex flex-col gap-3">
-                                                <p className="text-[11px] text-slate-500 font-bold bg-amber-50 p-3 rounded-xl border border-amber-100 text-amber-800">
-                                                    請在 Excel 複製<span className="text-rose-600">「單一整排的成績」</span>後貼於下方。<br/>
-                                                    系統會自動依照 <span className="underline">目前學生的座號順序(1~{students.length}號)</span> 依序填入。<br/>
-                                                    若該號碼缺考，請保持空白或是保留文字(如:缺考,-)。
-                                                </p>
-                                                <textarea 
-                                                    className="flex-grow w-full p-4 border-2 border-dashed border-emerald-300 rounded-2xl bg-white text-sm focus:outline-none focus:border-emerald-500 custom-scrollbar font-mono leading-relaxed"
-                                                    placeholder="95&#10;88&#10;76&#10;...&#10;(請在此貼上)"
-                                                    value={pastedScores}
-                                                    onChange={e => setPastedScores(e.target.value)}
-                                                />
-                                                <button onClick={handleProcessPastedScores} className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 py-3 rounded-xl font-black text-sm transition border border-emerald-300 shadow-sm">
-                                                    ⬇️ 載入貼上的成績 (載入後可預覽確認)
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        <div className="border-t pt-4 mt-4 flex gap-3 shrink-0">
-                                            <button onClick={() => setShowQuickScoreModal(false)} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-bold text-slate-600 transition">取消返回</button>
-                                            <button onClick={saveQuickScores} className="flex-[2] px-4 py-3 bg-[#00704A] hover:bg-[#005a3c] text-white rounded-xl text-sm font-bold transition shadow-md active:scale-95">💾 儲存全班成績</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* 學生單一綜合編輯 Modal */}
-                            {modifyingStudent && (
-                                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-                                    <div className="bg-white rounded-3xl w-full max-w-2xl p-6 flex flex-col gap-4 max-h-[90vh]">
-                                        <div className="flex justify-between items-center border-b pb-3">
-                                            <h3 className="font-bold">📝 編輯：{modifyingStudent.name}</h3>
-                                            <button onClick={() => setModifyingStudent(null)} className="text-slate-400 hover:text-slate-600">關閉</button>
-                                        </div>
-                                        <div className="overflow-y-auto custom-scrollbar pr-2 space-y-4">
-                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl">
-                                                <div><label className="text-[10px] text-slate-500">姓名 (儲存自動遮蔽)</label><input type="text" className="w-full p-2 border rounded-xl text-sm" value={modifyingStudent.name} onChange={e=>setModifyingStudent({...modifyingStudent, name:e.target.value})}/></div>
-                                                <div><label className="text-[10px] text-slate-500">自訂登入密碼</label><input type="text" className="w-full p-2 border rounded-xl text-sm" value={modifyingStudent.password} onChange={e=>setModifyingStudent({...modifyingStudent, password:e.target.value})}/></div>
-                                                <div><label className="text-[10px] text-slate-500">總分進步分數</label><input type="number" className="w-full p-2 border rounded-xl text-sm" value={modifyingStudent.progress} onChange={e=>setModifyingStudent({...modifyingStudent, progress:parseFloat(e.target.value)||0})}/></div>
-                                                <div><label className="text-[10px] text-slate-500">手動歸零登入次數</label><button onClick={() => setModifyingStudent({...modifyingStudent, loginCount: 0})} className="w-full p-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-xs font-bold text-slate-600 mt-1">目前: {modifyingStudent.loginCount || 0} (點擊歸零)</button></div>
-                                            </div>
-                                            
-                                            {(settings.examType === '段考' || settings.examType === '模擬考') && (
-                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100">
-                                                    <div><label className="text-[10px] text-indigo-500 font-bold">班級排名</label><input type="number" placeholder="未填" className="w-full p-2 border border-indigo-200 rounded-xl text-sm text-indigo-700 font-bold" value={modifyingStudent.classRank || ''} onChange={e=>setModifyingStudent({...modifyingStudent, classRank:parseInt(e.target.value)||null})}/></div>
-                                                    <div><label className="text-[10px] text-indigo-500 font-bold">班排進步 (正數為進步)</label><input type="number" placeholder="未填" className="w-full p-2 border border-indigo-200 rounded-xl text-sm" value={modifyingStudent.classRankProgress || ''} onChange={e=>setModifyingStudent({...modifyingStudent, classRankProgress:parseInt(e.target.value)||null})}/></div>
-                                                    <div><label className="text-[10px] text-purple-500 font-bold">全校排名</label><input type="number" placeholder="未填" className="w-full p-2 border border-purple-200 rounded-xl text-sm text-purple-700 font-bold" value={modifyingStudent.schoolRank || ''} onChange={e=>setModifyingStudent({...modifyingStudent, schoolRank:parseInt(e.target.value)||null})}/></div>
-                                                    <div><label className="text-[10px] text-purple-500 font-bold">校排進步 (正數為進步)</label><input type="number" placeholder="未填" className="w-full p-2 border border-purple-200 rounded-xl text-sm" value={modifyingStudent.schoolRankProgress || ''} onChange={e=>setModifyingStudent({...modifyingStudent, schoolRankProgress:parseInt(e.target.value)||null})}/></div>
-                                                </div>
-                                            )}
-
-                                            <div className="grid grid-cols-2 gap-3">
-                                                {settings.subjects.map(sub => {
-                                                    return (
-                                                        <div key={sub.name} className="bg-stone-50 p-2 rounded-xl flex justify-between items-center border border-slate-100">
-                                                            <span className="text-xs font-bold text-[#00704A] ml-1">{sub.name}</span>
-                                                            <input type="number" className="w-20 p-1.5 border rounded-lg text-sm text-center" placeholder="-" value={getStudentScore(modifyingStudent, sub.name) !== null ? getStudentScore(modifyingStudent, sub.name) : ''} onChange={e=>{
-                                                                const val = e.target.value === '' ? '' : parseFloat(e.target.value);
-                                                                const tempScores = {...(modifyingStudent.scores || {})};
-                                                                tempScores[sub.name] = val;
-                                                                setModifyingStudent({...modifyingStudent, scores: tempScores});
-                                                            }} />
-                                                        </div>
-                                                    );
-                                                })}
-                                                {settings.subjects.length === 0 && <div className="col-span-2 text-xs text-slate-400 text-center py-2">目前無考科</div>}
-                                            </div>
-                                        </div>
-                                        <div className="flex justify-end gap-2 pt-3 border-t">
-                                            <button onClick={() => setModifyingStudent(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-bold text-slate-700">取消</button>
-                                            <button onClick={saveModifiedStudent} className="bg-[#00704A] hover:bg-[#005a3c] text-white px-5 py-2 rounded-xl text-sm font-bold shadow-md">儲存修改</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
 
                         </main>
                     )}
@@ -1783,5 +1636,4 @@
     </script>
 </body>
 </html>
-
 
