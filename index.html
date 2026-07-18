@@ -46,7 +46,7 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght=300;400;500;700;900&display=swap');
         
-        /* 修正 iOS Safari 高度崩潰與捲動問題，改用自然延展 */
+        /* 確保全域允許自然捲動，修復 Safari 高度限制與裁切問題 */
         html, body {
             -webkit-overflow-scrolling: touch;
             font-family: 'Noto Sans TC', sans-serif;
@@ -189,9 +189,9 @@
                 if (this.state.hasError) {
                     return (
                         <div className="p-8 text-center text-rose-600 bg-rose-50 h-screen flex flex-col items-center justify-center">
-                            <h2 className="text-2xl font-bold mb-4">⚠️ 系統畫面渲染發生錯誤</h2>
+                            <h2 className="text-2xl font-black mb-4">⚠️ 系統畫面渲染發生錯誤</h2>
                             <p className="bg-white p-4 rounded border border-rose-200 text-sm shadow-md font-mono max-w-2xl text-left overflow-auto">{this.state.errorInfo}</p>
-                            <button onClick={() => window.location.reload()} className="mt-6 px-4 py-2 bg-rose-600 text-white rounded font-bold">重新載入</button>
+                            <button onClick={() => window.location.reload()} className="mt-6 px-4 py-2 bg-rose-600 text-white rounded font-black">重新載入</button>
                         </div>
                     );
                 }
@@ -295,7 +295,6 @@
 
             // ================= 監聽資料庫 =================
             useEffect(() => {
-                // ⚠️【關鍵修復 1】：移除 !firebaseUser 限制。確保在 GitHub Pages 沒有啟用匿名登入也能強制作為訪客讀取資料！
                 if (!firebaseReady) return; 
                 
                 const { db, onSnapshot, doc, collection } = window.firebaseAPI;
@@ -328,7 +327,6 @@
                     try {
                         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                         
-                        // 使用安全數值排序，避免 iOS Safari 處理字串比較時閃退
                         list.sort((a, b) => {
                             const strA = String(a.seatNo || '').trim();
                             const strB = String(b.seatNo || '').trim();
@@ -404,21 +402,22 @@
             };
 
             const getGradeLevelStats = () => {
-                const stats = { A: 0, B: 0, C: 0, D: 0, E: 0, avg: 0 };
-                if (students.length === 0) return stats;
+                const results = { A: 0, B: 0, C: 0, D: 0, E: 0, avg: 0 };
+                if (students.length === 0) return results;
                 let totalSum = 0;
                 students.forEach(s => {
                     const avg = calculateStudentAvg(s);
                     totalSum += avg;
-                    if (avg >= 90) stats.A++;
-                    else if (avg >= 80) stats.B++;
-                    else if (avg >= 70) stats.C++;
-                    else if (avg >= 60) stats.D++;
-                    else stats.E++;
+                    if (avg >= 90) results.A++;
+                    else if (avg >= 80) results.B++;
+                    else if (avg >= 70) results.C++;
+                    else if (avg >= 60) results.D++;
+                    else results.E++;
                 });
-                stats.avg = totalSum / students.length;
-                return stats;
+                results.avg = totalSum / students.length;
+                return results;
             };
+            const classGradeStats = getGradeLevelStats();
 
             const getGradeLevelName = (avg) => {
                 if (avg >= 90) return "A級距 (90-100)";
@@ -469,6 +468,26 @@
                     if (parts[2].length === 4) return `${parts[2]}-${parts[0].padStart(2,'0')}-${parts[1].padStart(2,'0')}`;
                 }
                 return '';
+            };
+
+            const getOverdueSubjects = (student) => {
+                if (!student) return [];
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                
+                return settings.subjects.filter(sub => {
+                    if (getStudentScore(student, sub.name) !== null) return false;
+                    if (!sub.date || sub.date === '未設定') return false;
+                    
+                    const examDate = new Date(toDateInputFormat(sub.date));
+                    if (isNaN(examDate.getTime())) return false;
+                    examDate.setHours(0,0,0,0);
+                    
+                    const diffTime = today.getTime() - examDate.getTime();
+                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                    
+                    return diffDays >= 2;
+                });
             };
 
             const openTeacherLoginModal = (e) => {
@@ -986,17 +1005,20 @@
                 });
             };
 
+            // ⚠️ 關鍵修復：儲存時連同單科成績一起更新，確保編輯面板可以正常發揮作用
             const saveModifiedStudent = () => {
                 if (!modifyingStudent) return;
                 const rawName = String(modifyingStudent.name || '').trim();
                 if (!rawName) return showToast("姓名不能為空！", "error");
                 
                 const { db, doc, setDoc } = window.firebaseAPI;
+                // 注意：我們不需要重新 maskName 如果它已經是 mask 狀態，這裡假設導師修改的是實際姓名
+                // 為了方便導師，這裡我們先保留原本的 mask 邏輯，但成績也會一併儲存
                 const updatedData = { ...modifyingStudent, name: maskName(rawName) };
                 setDoc(doc(db, `${basePath}/submissions/${updatedData.id}`), updatedData)
                     .then(() => {
                         setModifyingStudent(null);
-                        showToast("學生資訊已更新！");
+                        showToast("學生資訊與成績已更新！");
                     })
                     .catch(e => showToast(`儲存失敗：${e.message}`, "error"));
             };
@@ -1049,17 +1071,13 @@
 
             const getAnalyticsData = () => {
                 if (!analyticsSubject) return null;
-                
                 if (students.length === 0) return { count: 0, max: '-', min: '-', avg: '-', ranges: { A:0, B:0, C:0, D:0, E:0 }, isLoaded: false };
-                
                 const validScores = students.map(s => getStudentScore(s, analyticsSubject)).filter(sc => sc !== null);
-                
                 if (validScores.length === 0) return { count: 0, max: '-', min: '-', avg: '-', ranges: { A:0, B:0, C:0, D:0, E:0 }, isLoaded: true };
                 
                 const max = Math.max(...validScores);
                 const min = Math.min(...validScores);
                 const avg = (validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(1);
-                
                 const ranges = { A: 0, B: 0, C: 0, D: 0, E: 0 };
                 validScores.forEach(sc => {
                     if (sc >= 90) ranges.A++;
@@ -1080,11 +1098,9 @@
                 return settings.subjects.filter(sub => {
                     const subDateStr = toDateInputFormat(sub.date);
                     if (!subDateStr) return false; 
-                    
                     const cDate = new Date(subDateStr);
                     const sDate = start ? new Date(start) : new Date('1900-01-01');
                     const eDate = end ? new Date(end) : new Date('2100-01-01');
-                    
                     if (isNaN(cDate.getTime())) return false;
                     return cDate >= sDate && cDate <= eDate;
                 });
@@ -1092,9 +1108,9 @@
 
             const renderRadarChart = (targetStudent, aiData) => {
                 const validData = aiData.filter(d => d.studentAvg !== null || d.classAvg > 0);
-                if (validData.length < 3) return <div className="py-10 text-slate-400 text-[10px] text-center">📊 區間內大科目不足 3 科，無法繪製雷達圖</div>;
+                if (validData.length < 3) return <div className="py-10 text-slate-400 text-[10px] text-center font-bold">📊 區間大科目不足 3 科，無法繪製雷達圖</div>;
 
-                const size = 140, center = size / 2, maxRadius = 50, N = validData.length;
+                const size = 180, center = size / 2, maxRadius = 65, N = validData.length;
                 const getCoords = (index, value) => {
                     const angle = (Math.PI * 2 / N) * index - Math.PI / 2;
                     const r = ((value ? value : 0) / 100) * maxRadius;
@@ -1109,28 +1125,22 @@
 
                 return (
                     <div className="flex flex-col items-center">
-                        <svg width="150" height="150" className="mx-auto my-0 overflow-visible">
+                        <svg width="200" height="200" className="mx-auto my-0 overflow-visible">
                             {gridPolygons.map((pts, idx) => <polygon key={idx} points={pts} fill="none" stroke="#E2E8F0" strokeWidth="1" />)}
                             {validData.map((_, i) => <line key={i} x1={center} y1={center} x2={getCoords(i, 100).x} y2={getCoords(i, 100).y} stroke="#E2E8F0" strokeWidth="1" />)}
-                            
                             <polygon points={classAvgPoints} fill="rgba(99, 102, 241, 0.08)" stroke="#6366F1" strokeWidth="2" strokeDasharray="4 4" />
-                            {validData.map((data, i) => <circle key={`c_${i}`} cx={getCoords(i, data.classAvg || 0).x} cy={getCoords(i, data.classAvg || 0).y} r="2" fill="#6366F1" />)}
-
-                            <polygon points={studentPoints} fill="rgba(0, 112, 74, 0.2)" stroke="#00704A" strokeWidth="2" />
-                            {validData.map((data, i) => <circle key={i} cx={getCoords(i, data.studentAvg || 0).x} cy={getCoords(i, data.studentAvg || 0).y} r="2.5" fill="#00704A" />)}
-                            
-                            {validData.map((data, i) => <text key={i} x={getCoords(i, 125).x} y={getCoords(i, 125).y + 3} textAnchor="middle" className="text-[9px] font-bold fill-slate-600">{data.baseName}</text>)}
+                            {validData.map((data, i) => <circle key={`c_${i}`} cx={getCoords(i, data.classAvg || 0).x} cy={getCoords(i, data.classAvg || 0).y} r="2.5" fill="#6366F1" />)}
+                            <polygon points={studentPoints} fill="rgba(0, 112, 74, 0.2)" stroke="#00704A" strokeWidth="2.5" />
+                            {validData.map((data, i) => <circle key={i} cx={getCoords(i, data.studentAvg || 0).x} cy={getCoords(i, data.studentAvg || 0).y} r="3.5" fill="#00704A" />)}
+                            {validData.map((data, i) => <text key={i} x={getCoords(i, 125).x} y={getCoords(i, 125).y + 4} textAnchor="middle" className="text-[10px] font-black fill-slate-700">{data.baseName}</text>)}
                         </svg>
-                        
-                        <div className="flex justify-center gap-3 mt-1 text-[9px] font-bold text-slate-500">
-                            <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-[#00704A] opacity-60 rounded-sm"></div>個人(科平)</span>
-                            <span className="flex items-center gap-1"><div className="w-3 h-0 border-t-2 border-dashed border-indigo-500"></div>班級(科平)</span>
+                        <div className="flex justify-center gap-3 mt-2 text-[10px] font-black text-slate-600">
+                            <span className="flex items-center gap-1"><div className="w-3 h-3 bg-[#00704A] opacity-60 rounded-sm"></div>個人(科平)</span>
+                            <span className="flex items-center gap-1"><div className="w-4 h-0 border-t-2 border-dashed border-indigo-500"></div>班級(科平)</span>
                         </div>
                     </div>
                 );
             };
-
-            const stats = getGradeLevelStats();
 
             const renderReportCard = (targetStudent, allowEdit) => {
                 const displaySubjects = getVisibleSubjects();
@@ -1140,7 +1150,6 @@
                 displaySubjects.forEach(sub => {
                     let baseName = sub.name.split(/[\(（\-_ ]/)[0].trim();
                     if (!baseName) baseName = sub.name;
-
                     if (!baseSubjectMap[baseName]) {
                         baseSubjectMap[baseName] = { studentScores: [], classScores: [] };
                         groupedSubjectsOrder.push(baseName);
@@ -1160,10 +1169,7 @@
                     return { baseName, studentAvg, classAvg };
                 });
 
-                let columnsCount = 1;
-                if (displaySubjects.length > 12) columnsCount = 3;
-                else if (displaySubjects.length > 6) columnsCount = 2;
-
+                let columnsCount = 2; 
                 const chunkSize = Math.ceil(displaySubjects.length / columnsCount);
                 const validChunks = [];
                 for (let i = 0; i < columnsCount; i++) {
@@ -1171,43 +1177,35 @@
                     if (chunk.length > 0) validChunks.push(chunk);
                 }
 
-                const gridClass = validChunks.length === 1 
-                    ? "grid-cols-1" 
-                    : validChunks.length === 2 
-                        ? "grid-cols-1 sm:grid-cols-2 print:grid-cols-2" 
-                        : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3";
+                const gridClass = "grid-cols-1 sm:grid-cols-2 print:grid-cols-2";
 
                 const renderTableChunk = (chunk, chunkIndex) => (
                     <div key={`chunk-${chunkIndex}`} className="overflow-hidden border border-slate-200 rounded-xl shadow-sm bg-white h-fit">
-                        <table className="min-w-full divide-y divide-slate-200 text-center text-[11px] sm:text-xs">
+                        <table className="min-w-full divide-y divide-slate-200 text-center text-[10px] print:text-[11px]">
                             <thead className="bg-[#1E3932] text-white">
                                 <tr>
-                                    <th className="px-2 py-2 text-left font-bold pl-3">科目</th>
-                                    <th className="px-2 py-2 text-left font-bold">範圍</th>
-                                    <th className="px-1 py-2 font-bold">成績</th>
-                                    {settings.showClassAvg && <th className="px-1 py-2 font-bold">班平</th>}
-                                    {allowEdit && <th className="px-1 py-2 font-bold no-print">登記</th>}
+                                    <th className="px-1 py-1.5 text-left font-black pl-2 w-1/3">科目</th>
+                                    <th className="px-1 py-1.5 text-left font-black w-1/3">範圍</th>
+                                    <th className="px-1 py-1.5 font-black w-[15%]">成績</th>
+                                    {allowEdit && <th className="px-1 py-1.5 font-black no-print">登記</th>}
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-slate-100 font-medium">
+                            <tbody className="bg-white divide-y divide-slate-100 font-bold">
                                 {chunk.map((sub, idx) => {
                                     const score = getStudentScore(targetStudent, sub.name);
                                     const classAvg = calculateClassSubjectAvg(sub.name);
                                     const isBelowAvg = score !== null && classAvg > 0 && score < classAvg;
                                     return (
                                         <tr key={idx} className="hover:bg-slate-50">
-                                            <td className="px-2 py-2.5 text-left font-bold text-slate-800 pl-3">{sub.name}</td>
-                                            <td className="px-2 py-2.5 text-left text-slate-500 max-w-[80px] sm:max-w-[120px] truncate" title={`${sub.scope} (${sub.date})`}>
-                                                {sub.scope}
-                                            </td>
-                                            <td className={`px-1 py-2.5 font-bold text-sm ${isBelowAvg ? 'text-rose-600' : 'text-[#00704A]'}`}>
+                                            <td className="px-1 py-1.5 text-left font-black text-slate-800 pl-2 truncate max-w-[60px]">{sub.name}</td>
+                                            <td className="px-1 py-1.5 text-left text-slate-500 truncate max-w-[70px]" title={`${sub.scope} (${sub.date})`}>{sub.scope}</td>
+                                            <td className={`px-1 py-1.5 font-black text-[11px] ${isBelowAvg ? 'text-rose-600' : 'text-[#00704A]'}`}>
                                                 {score !== null ? score.toFixed(1) : "-"}
                                             </td>
-                                            {settings.showClassAvg && <td className="px-1 py-2.5 text-slate-400">{classAvg > 0 ? classAvg.toFixed(1) : "-"}</td>}
                                             {allowEdit && (
-                                                <td className="px-1 py-2.5 no-print">
+                                                <td className="px-1 py-1.5 no-print">
                                                     {sub.locked ? <span className="text-slate-400 text-[9px] bg-slate-100 px-1 py-0.5 rounded">🔒</span> : 
-                                                        <button onClick={() => startEditSubjectScore(sub)} className="bg-emerald-50 text-[#00704A] border border-emerald-200 px-1.5 py-0.5 rounded text-[9px] font-bold">🖊️</button>
+                                                        <button onClick={() => startEditSubjectScore(sub)} className="bg-emerald-50 text-[#00704A] border border-emerald-200 px-1.5 py-0.5 rounded text-[9px] font-black">🖊️</button>
                                                     }
                                                 </td>
                                             )}
@@ -1221,49 +1219,51 @@
 
                 return (
                     <div key={targetStudent.id} className="print-page bg-white p-5 sm:p-8 rounded-[2rem] border border-slate-100 shadow-2xl max-w-5xl w-full flex flex-col gap-4 relative mx-auto mb-8">
-                        <div className="border-b-2 border-slate-100 pb-2 flex justify-between items-end">
-                            <h2 className="text-xl sm:text-2xl font-black text-slate-800">{targetStudent.name} <span className="text-xs font-medium text-slate-500">的成績通知單</span></h2>
+                        <div className="border-b-2 border-slate-100 pb-2 flex justify-between items-end shrink-0">
+                            <h2 className="text-xl sm:text-2xl font-black text-slate-800">{targetStudent.name} <span className="text-xs font-bold text-slate-500">的成績通知單</span></h2>
                         </div>
-                        <div className="flex flex-col lg:flex-row gap-4">
-                            <div className="w-full lg:w-4/12 flex flex-col gap-3">
+                        
+                        <div className="flex flex-col lg:flex-row gap-6 shrink-0 lg:h-[360px] print:h-[360px]">
+                            
+                            <div className="w-full lg:w-1/2 flex flex-col gap-4 h-full">
                                 {settings.showRadarChart !== false && (
-                                    <div className="bg-slate-50/50 p-2 rounded-2xl border border-slate-100 text-center">
-                                        <span className="text-[9px] font-bold text-[#00704A] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 inline-block mb-1">區間各科(平均)雷達圖</span>
+                                    <div className="bg-slate-50/50 p-4 rounded-3xl border border-slate-100 text-center flex-grow flex flex-col items-center justify-center">
+                                        <span className="text-[9px] font-black text-[#00704A] bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 inline-block mb-3 shadow-sm">區間各科(平均)雷達圖</span>
                                         {renderRadarChart(targetStudent, aiDiagnosticsData)}
                                     </div>
                                 )}
-                                <div className="grid grid-cols-2 gap-2 text-center">
+                                <div className="grid grid-cols-2 gap-3 text-center shrink-0">
                                     {settings.showGradeLevel && (
-                                        <div className="bg-slate-50 border p-2 rounded-xl flex flex-col justify-center">
-                                            <span className="block text-[9px] text-slate-400 font-bold">級距</span>
-                                            <span className="block text-xs font-black text-slate-800 mt-0.5">{getGradeLevelName(calculateStudentAvg(targetStudent, displaySubjects))}</span>
+                                        <div className="bg-slate-50 border p-3 rounded-2xl flex flex-col justify-center">
+                                            <span className="block text-[10px] text-slate-400 font-black">級距</span>
+                                            <span className="block text-sm font-black text-slate-800 mt-1">{getGradeLevelName(calculateStudentAvg(targetStudent, displaySubjects))}</span>
                                         </div>
                                     )}
                                     {settings.showProgress && (
-                                        <div className="bg-slate-50 border p-2 rounded-xl flex flex-col justify-center">
-                                            <span className="block text-[9px] text-slate-400 font-bold">總分進步</span>
-                                            <span className={`block text-xs font-black mt-0.5 ${targetStudent.progress > 0 ? 'text-emerald-600' : targetStudent.progress < 0 ? 'text-rose-500' : 'text-slate-500'}`}>
+                                        <div className="bg-slate-50 border p-3 rounded-2xl flex flex-col justify-center">
+                                            <span className="block text-[10px] text-slate-400 font-black">總分進步</span>
+                                            <span className={`block text-sm font-black mt-1 ${targetStudent.progress > 0 ? 'text-emerald-600' : targetStudent.progress < 0 ? 'text-rose-500' : 'text-slate-500'}`}>
                                                 {targetStudent.progress > 0 ? `⬆️ +${targetStudent.progress}` : targetStudent.progress < 0 ? `⬇️ ${Math.abs(targetStudent.progress)}` : '0'} 分
                                             </span>
                                         </div>
                                     )}
                                     {(settings.examType === '段考' || settings.examType === '模擬考') && (
-                                        <div className="bg-indigo-50/50 border border-indigo-100 p-2 rounded-xl flex flex-col justify-center">
-                                            <span className="block text-[9px] text-indigo-500 font-bold">班級排名</span>
-                                            <span className="block text-xs font-black text-indigo-800 mt-0.5">{targetStudent.classRank || '-'}</span>
+                                        <div className="bg-indigo-50/50 border border-indigo-100 p-3 rounded-2xl flex flex-col justify-center">
+                                            <span className="block text-[10px] text-indigo-500 font-black">班級排名</span>
+                                            <span className="block text-sm font-black text-indigo-800 mt-1">{targetStudent.classRank || '-'}</span>
                                             {targetStudent.classRankProgress ? (
-                                                <span className={`block text-[9px] font-bold mt-1 ${targetStudent.classRankProgress > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                <span className={`block text-[10px] font-black mt-1 ${targetStudent.classRankProgress > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                                                     {targetStudent.classRankProgress > 0 ? `⬆️+${targetStudent.classRankProgress}` : `⬇️${Math.abs(targetStudent.classRankProgress)}`}
                                                 </span>
                                             ) : null}
                                         </div>
                                     )}
                                     {(settings.examType === '段考' || settings.examType === '模擬考') && (
-                                        <div className="bg-purple-50/50 border border-purple-100 p-2 rounded-xl flex flex-col justify-center">
-                                            <span className="block text-[9px] text-purple-500 font-bold">全校排名</span>
-                                            <span className="block text-xs font-black text-purple-800 mt-0.5">{targetStudent.schoolRank || '-'}</span>
+                                        <div className="bg-purple-50/50 border border-purple-100 p-3 rounded-2xl flex flex-col justify-center">
+                                            <span className="block text-[10px] text-purple-500 font-black">全校排名</span>
+                                            <span className="block text-sm font-black text-purple-800 mt-1">{targetStudent.schoolRank || '-'}</span>
                                             {targetStudent.schoolRankProgress ? (
-                                                <span className={`block text-[9px] font-bold mt-1 ${targetStudent.schoolRankProgress > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                                <span className={`block text-[10px] font-black mt-1 ${targetStudent.schoolRankProgress > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
                                                     {targetStudent.schoolRankProgress > 0 ? `⬆️+${targetStudent.schoolRankProgress}` : `⬇️${Math.abs(targetStudent.schoolRankProgress)}`}
                                                 </span>
                                             ) : null}
@@ -1271,70 +1271,81 @@
                                     )}
                                 </div>
                             </div>
-                            <div className="w-full lg:w-8/12 flex flex-col gap-3 justify-between">
+                            
+                            <div className="w-full lg:w-1/2 flex flex-col gap-3 justify-start h-full">
                                 {allowEdit && editingSubject && (
-                                    <div className="no-print bg-emerald-50/60 border border-emerald-200/80 p-3 rounded-2xl flex flex-col gap-2 animate-fade-in shadow-inner">
-                                        <div className="flex justify-between items-center pb-1.5 border-b border-emerald-200">
+                                    <div className="no-print bg-emerald-50/60 border border-emerald-200/80 p-3 rounded-2xl flex flex-col gap-2 animate-fade-in shadow-inner shrink-0">
+                                        <div className="flex justify-between items-center pb-2 border-b border-emerald-200">
                                             <div>
-                                                <h3 className="font-black text-[#1E3932] text-xs">🖊️ 登記成績：{editSubName}</h3>
+                                                <h3 className="font-black text-[#1E3932] text-sm">🖊️ 登記成績：{editSubName}</h3>
                                                 {editSubScope && editSubScope !== '未設定' ? 
-                                                    <span className="text-[10px] text-emerald-700 font-bold mt-1 bg-emerald-100 px-2 py-0.5 rounded-md inline-block border border-emerald-200">範圍：{editSubScope}</span> 
+                                                    <span className="text-[10px] text-emerald-700 font-black mt-1 bg-emerald-100 px-2 py-0.5 rounded-md inline-block border border-emerald-200">範圍：{editSubScope}</span> 
                                                 : null}
                                             </div>
-                                            <button onClick={() => setEditingSubject(null)} className="text-slate-400 hover:text-slate-600 text-[10px] bg-white px-2 py-1 rounded-lg shadow-sm border border-slate-200 font-bold">取消</button>
+                                            <button onClick={() => setEditingSubject(null)} className="text-slate-500 hover:text-slate-700 text-xs bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-200 font-black">取消</button>
                                         </div>
                                         <div className="flex gap-2 mt-1">
-                                            <input type="number" min="0" max="100" step="any" placeholder="輸入分數" className="w-full p-2 bg-white border border-slate-200 rounded-lg text-center text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#00704A] transition-all shadow-sm" value={editForm.score} onChange={e => setEditForm({ score: e.target.value })} onKeyDown={e => e.key === 'Enter' && saveStudentScore()} />
-                                            <button onClick={saveStudentScore} className="bg-[#00704A] hover:bg-[#005a3c] text-white px-4 rounded-lg text-xs font-bold transition shadow-md active:scale-95 whitespace-nowrap">💾 儲存</button>
+                                            <input type="number" min="0" max="100" step="any" placeholder="輸入分數" className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-center text-sm font-black focus:outline-none focus:ring-2 focus:ring-[#00704A] transition-all shadow-sm" value={editForm.score} onChange={e => setEditForm({ score: e.target.value })} onKeyDown={e => e.key === 'Enter' && saveStudentScore()} />
+                                            <button onClick={saveStudentScore} className="bg-[#00704A] hover:bg-[#005a3c] text-white px-5 rounded-xl text-sm font-black transition shadow-md active:scale-95 whitespace-nowrap">💾 儲存</button>
                                         </div>
                                     </div>
                                 )}
-                                <div className="flex flex-col flex-grow">
-                                    <div className="border-b border-slate-100 pb-1 mb-2 flex justify-between items-center">
+                                
+                                <div className="flex flex-col flex-grow bg-white border border-slate-100 rounded-3xl p-4 shadow-sm overflow-hidden">
+                                    <div className="border-b-2 border-slate-100 pb-2 mb-3 flex justify-between items-center shrink-0">
                                         <h3 className="font-black text-slate-800 text-sm">📊 AI 區間學習綜合診斷</h3>
-                                        <span className="text-[9px] bg-emerald-50 text-[#00704A] border font-bold px-1.5 py-0.5 rounded-full hidden sm:inline">語氣：{settings.gradingTone}</span>
+                                        <span className="text-[10px] bg-emerald-50 text-[#00704A] border font-black px-2 py-1 rounded-full hidden sm:inline">語氣：{settings.gradingTone}</span>
                                     </div>
                                     {settings.enableComments ? (
-                                        <div className="space-y-1.5 max-h-[150px] print:max-h-none print:overflow-visible overflow-y-auto custom-scrollbar pr-1">
-                                            {aiDiagnosticsData.length === 0 && <div className="text-center py-4 text-slate-400 text-xs">區間內無考科可供診斷</div>}
+                                        <div className="space-y-2.5 overflow-y-auto custom-scrollbar pr-2 h-full print:overflow-hidden print:max-h-full flex-grow">
+                                            {aiDiagnosticsData.length === 0 && <div className="text-center py-6 text-slate-400 text-xs font-bold">區間內無考科可供診斷</div>}
                                             {aiDiagnosticsData.map((data, idx) => {
                                                 const comment = getLocalDiagnostic(targetStudent, data.baseName, data.studentAvg, data.classAvg, settings.gradingTone);
                                                 return (
-                                                    <div key={idx} className="p-2 rounded-xl border bg-stone-50 hover:bg-white transition-colors break-inside-avoid">
-                                                        <div className="flex justify-between items-center mb-0.5">
-                                                            <span className="font-bold text-[#1E3932] text-[11px]">【{data.baseName} - 綜合評估】</span>
-                                                            <span className="text-[9px] text-slate-500 font-bold bg-white px-1.5 py-0.5 rounded border shadow-sm">
+                                                    <div key={idx} className="p-3 rounded-2xl border border-slate-100 bg-stone-50/50 hover:bg-white transition-colors break-inside-avoid shadow-sm">
+                                                        <div className="flex justify-between items-center mb-1">
+                                                            <span className="font-black text-[#1E3932] text-[11px]">【{data.baseName} - 綜合評估】</span>
+                                                            <span className="text-[10px] text-slate-500 font-black bg-white px-2 py-0.5 rounded border shadow-sm">
                                                                 科平均 {data.studentAvg !== null ? data.studentAvg.toFixed(1) : '-'}
                                                             </span>
                                                         </div>
-                                                        <p className="text-slate-600 text-[11px] leading-relaxed">{comment}</p>
+                                                        <p className="text-slate-600 text-[11px] font-bold leading-relaxed">{comment}</p>
                                                     </div>
                                                 );
                                             })}
                                         </div>
-                                    ) : <div className="text-center py-6 text-slate-400 text-[10px] border border-dashed rounded-xl">評語未啟用</div>}
+                                    ) : <div className="text-center py-8 text-slate-400 text-xs font-bold border border-dashed rounded-2xl">評語未啟用</div>}
                                 </div>
-                                <div className="p-2 bg-amber-50 border border-amber-100 rounded-xl break-inside-avoid mt-1">
-                                    <h5 className="text-[9px] uppercase font-bold text-amber-800 mb-0.5">導師叮嚀</h5>
-                                    <p className="text-[11px] text-amber-900 font-medium whitespace-pre-wrap leading-tight">{settings.printRemark}</p>
+                                
+                                <div className="p-3 bg-amber-50 border border-amber-100 rounded-2xl break-inside-avoid shrink-0">
+                                    <h5 className="text-[10px] uppercase font-black text-amber-800 mb-1">導師叮嚀</h5>
+                                    <p className="text-xs text-amber-900 font-bold whitespace-pre-wrap leading-tight">{settings.printRemark}</p>
                                 </div>
                             </div>
                         </div>
-                        <div className="flex flex-col gap-3 mt-1 border-t-2 border-slate-100 pt-3">
-                            <h3 className="font-black text-slate-800 text-sm">📝 區間考試成績明細</h3>
-                            <div className={`grid ${gridClass} gap-3 items-start`}>
-                                {validChunks.map((chunk, index) => renderTableChunk(chunk, index))}
-                                {validChunks.length === 0 && <div className="text-slate-400 text-xs font-bold py-2">此區間內無任何考試紀錄。</div>}
+
+                        <div className="flex flex-col gap-3 mt-4 border-t-2 border-slate-100 pt-5 flex-grow">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="font-black text-slate-800 text-base">📝 區間考試成績明細</h3>
+                                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded-md font-black border border-slate-200">
+                                    (統計區間：{settings.displayStartDate || '學期初'} ~ {settings.displayEndDate || '至今'})
+                                </span>
                             </div>
+                            
+                            <div className={`grid ${gridClass} gap-4 items-start`}>
+                                {validChunks.map((chunk, index) => renderTableChunk(chunk, index))}
+                                {validChunks.length === 0 && <div className="text-slate-400 text-sm font-black py-4">此區間內無任何考試紀錄。</div>}
+                            </div>
+
                             {settings.showTotalAvg && (
-                                <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-2.5 flex justify-between items-center font-bold break-inside-avoid mt-1">
+                                <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 flex justify-between items-center break-inside-avoid mt-2 shadow-sm">
                                     <div className="flex items-center gap-2 pl-2">
-                                        <span className="text-[#00704A] text-sm">區間總平均</span>
-                                        <span className="text-slate-400 text-xs hidden sm:inline">學科估算：</span>
+                                        <span className="text-[#00704A] text-base font-black">區間總平均</span>
+                                        <span className="text-slate-400 text-sm font-bold hidden sm:inline">學科估算：</span>
                                     </div>
-                                    <div className="flex items-center gap-4 pr-2">
-                                        {settings.showClassAvg && <span className="text-indigo-600 text-[10px]">班平均: {stats.avg.toFixed(1)}</span>}
-                                        <span className="text-[#00704A] text-xl font-black">{calculateStudentAvg(targetStudent, displaySubjects).toFixed(1)}</span>
+                                    <div className="flex items-center gap-5 pr-2">
+                                        {settings.showClassAvg && <span className="text-indigo-600 text-xs font-black bg-indigo-50 px-2 py-1 rounded-md">班平均: {classGradeStats.avg.toFixed(1)}</span>}
+                                        <span className="text-[#00704A] text-2xl font-black">{calculateStudentAvg(targetStudent, displaySubjects).toFixed(1)}</span>
                                     </div>
                                 </div>
                             )}
@@ -1347,7 +1358,7 @@
                 <div className="flex flex-col w-full min-h-screen">
                     {/* 警告與成功 Toast */}
                     {toast && (
-                        <div className={`fixed top-5 right-5 z-[999999] px-5 py-3 rounded-2xl shadow-2xl text-white font-medium flex items-center gap-2 transform transition-all duration-300 ${toast.type === 'error' ? 'bg-rose-500' : toast.type === 'warning' ? 'bg-amber-500 text-amber-950' : 'bg-emerald-500'}`}>
+                        <div className={`fixed top-5 right-5 z-[999999] px-5 py-3 rounded-2xl shadow-2xl text-white font-black flex items-center gap-2 transform transition-all duration-300 ${toast.type === 'error' ? 'bg-rose-500' : toast.type === 'warning' ? 'bg-amber-500 text-amber-950' : 'bg-emerald-500'}`}>
                             {toast.type === 'error' ? '⚠️' : toast.type === 'warning' ? '🔔' : '✅'} {toast.text}
                         </div>
                     )}
@@ -1378,13 +1389,13 @@
                                     autoFocus
                                     type="password" 
                                     placeholder="請輸入導師管理密碼" 
-                                    className="w-full bg-slate-50 border-2 border-slate-200 focus:border-[#00704A] focus:ring-1 focus:ring-[#00704A] rounded-2xl px-4 py-3 text-sm mb-4 outline-none transition font-bold" 
+                                    className="w-full bg-slate-50 border-2 border-slate-200 focus:border-[#00704A] focus:ring-1 focus:ring-[#00704A] rounded-2xl px-4 py-3 text-sm mb-4 outline-none transition font-black" 
                                     value={teacherPass} 
                                     onChange={e => setTeacherPass(e.target.value)} 
                                     onKeyDown={e => e.key==='Enter' && handleTeacherLoginOnMain()} 
                                 />
                                 <div className="flex gap-2">
-                                    <button onClick={() => {setShowTeacherModal(false); setTeacherPass('');}} className="flex-1 bg-slate-100 hover:bg-slate-200 py-3 rounded-2xl text-sm font-bold text-slate-600 transition">取消關閉</button>
+                                    <button onClick={() => {setShowTeacherModal(false); setTeacherPass('');}} className="flex-1 bg-slate-100 hover:bg-slate-200 py-3 rounded-2xl text-sm font-black text-slate-600 transition">取消關閉</button>
                                     <button onClick={handleTeacherLoginOnMain} className="flex-[2] bg-[#00704A] hover:bg-[#005a3c] text-white py-3 rounded-2xl text-sm font-black shadow-md transition active:scale-95">登入管理</button>
                                 </div>
                             </div>
@@ -1431,28 +1442,73 @@
                         </div>
                     )}
 
-                    {/* 編輯單一學生資料 Modal */}
+                    {/* ⚡ 全新設計：導師專屬「個別成績登錄 / 編輯」綜合面板 */}
                     {modifyingStudent && (
                         <div className="fixed inset-0 z-[150000] flex items-center justify-center bg-slate-900/60 p-4" onClick={() => setModifyingStudent(null)}>
-                            <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-                                <h3 className="text-lg font-black text-slate-800 text-center mb-4">📝 編輯學生資料</h3>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500">座號</label>
-                                        <input type="text" disabled className="w-full p-2 bg-slate-100 border rounded-lg text-sm cursor-not-allowed" value={modifyingStudent.seatNo} />
+                            <div className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-4 border-b pb-3 shrink-0">
+                                    <h3 className="text-xl font-black text-slate-800">📝 編輯學生資料與成績</h3>
+                                    <button onClick={() => setModifyingStudent(null)} className="text-slate-400 hover:text-slate-600 font-bold text-xl">✕</button>
+                                </div>
+                                
+                                <div className="overflow-y-auto custom-scrollbar pr-2 flex-grow flex flex-col gap-5">
+                                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                        <h4 className="text-sm font-black text-slate-700 mb-3 flex items-center gap-2"><span>👤</span> 基本資料</h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-500 mb-1 block">座號</label>
+                                                <input type="text" disabled className="w-full p-2 bg-slate-200 border border-slate-300 rounded-lg text-sm cursor-not-allowed font-bold" value={modifyingStudent.seatNo} />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-500 mb-1 block">姓名</label>
+                                                <input type="text" className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm font-black focus:ring-2 focus:ring-[#00704A] outline-none" value={modifyingStudent.name} onChange={e => setModifyingStudent({...modifyingStudent, name: e.target.value})} />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-500 mb-1 block">密碼</label>
+                                                <input type="text" className="w-full p-2 bg-white border border-slate-300 rounded-lg text-sm font-black focus:ring-2 focus:ring-[#00704A] outline-none" value={modifyingStudent.password || ''} onChange={e => setModifyingStudent({...modifyingStudent, password: e.target.value})} />
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500">姓名</label>
-                                        <input type="text" className="w-full p-2 bg-slate-50 border rounded-lg text-sm" value={modifyingStudent.name} onChange={e => setModifyingStudent({...modifyingStudent, name: e.target.value})} />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500">密碼</label>
-                                        <input type="text" className="w-full p-2 bg-slate-50 border rounded-lg text-sm" value={modifyingStudent.password || ''} onChange={e => setModifyingStudent({...modifyingStudent, password: e.target.value})} />
+
+                                    <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100">
+                                        <h4 className="text-sm font-black text-[#00704A] mb-3 flex items-center gap-2"><span>📊</span> 各科成績登錄面板</h4>
+                                        {settings.subjects.length === 0 ? (
+                                            <p className="text-xs font-bold text-slate-500 text-center py-4">目前尚未建立任何考試科目</p>
+                                        ) : (
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                                                {settings.subjects.map(sub => {
+                                                    const currentScore = modifyingStudent.scores && modifyingStudent.scores[sub.name] !== undefined ? modifyingStudent.scores[sub.name] : '';
+                                                    return (
+                                                        <div key={sub.name} className="flex flex-col gap-1">
+                                                            <label className="text-[11px] font-black text-slate-600 truncate" title={sub.name}>{sub.name}</label>
+                                                            <input 
+                                                                type="number" 
+                                                                min="0" max="100" step="any" 
+                                                                placeholder="未登記"
+                                                                className={`w-full p-2 border rounded-lg text-sm font-black text-center focus:ring-2 focus:ring-[#00704A] outline-none transition-colors ${currentScore !== '' ? 'bg-emerald-50 border-emerald-300 text-[#00704A]' : 'bg-white border-slate-300 text-slate-700'}`}
+                                                                value={currentScore}
+                                                                onChange={e => {
+                                                                    const val = e.target.value;
+                                                                    const newScores = { ...(modifyingStudent.scores || {}) };
+                                                                    if (val === '') {
+                                                                        delete newScores[sub.name];
+                                                                    } else {
+                                                                        newScores[sub.name] = parseFloat(val);
+                                                                    }
+                                                                    setModifyingStudent({...modifyingStudent, scores: newScores});
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="flex gap-2 mt-6">
-                                    <button onClick={() => setModifyingStudent(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 py-3 rounded-2xl text-sm font-bold text-slate-600 transition">取消</button>
-                                    <button onClick={saveModifiedStudent} className="flex-1 bg-[#00704A] hover:bg-[#005a3c] text-white py-3 rounded-2xl text-sm font-black shadow-md transition active:scale-95">儲存</button>
+
+                                <div className="flex gap-3 mt-5 shrink-0 pt-3 border-t">
+                                    <button onClick={() => setModifyingStudent(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 py-3 rounded-xl text-sm font-black text-slate-600 transition">取消返回</button>
+                                    <button onClick={saveModifiedStudent} className="flex-[2] bg-[#00704A] hover:bg-[#005a3c] text-white py-3 rounded-xl text-sm font-black shadow-md transition active:scale-95">💾 儲存所有變更</button>
                                 </div>
                             </div>
                         </div>
@@ -1550,15 +1606,15 @@
                                 {settings.className}
                             </div>
                             <div>
-                                <h1 className="text-base sm:text-lg font-bold tracking-wider">{settings.className} 成績查詢系統</h1>
-                                <p className="text-[10px] text-slate-300 font-medium hidden sm:block">簡潔考科範圍與即時智慧學術診斷</p>
+                                <h1 className="text-base sm:text-lg font-black tracking-wider">{settings.className} 成績查詢系統</h1>
+                                <p className="text-[10px] text-slate-300 font-bold hidden sm:block">簡潔考科範圍與即時智慧學術診斷</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
                             {viewMode === 'parent-login' && (
                                 <button 
                                     onClick={openSubjectTeacherModal} 
-                                    className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md border border-blue-500/20"
+                                    className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-3 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-md border border-blue-500/20"
                                 >
                                     <span className="text-sm">👨‍🏫</span>
                                     <span className="hidden sm:inline">任課老師</span>
@@ -1568,7 +1624,7 @@
                             {viewMode !== 'teacher-dashboard' && viewMode !== 'batch-print' && viewMode !== 'subject-analytics' && (
                                 <button 
                                     onClick={openTeacherLoginModal} 
-                                    className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md border border-emerald-500/20"
+                                    className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-md border border-emerald-500/20"
                                 >
                                     <span className="text-sm">⚙️</span>
                                     <span className="hidden sm:inline">導師管理</span>
@@ -1576,7 +1632,7 @@
                             )}
 
                             {(viewMode === 'teacher-dashboard' || viewMode === 'batch-print' || viewMode === 'subject-analytics') && (
-                                <button onClick={() => setViewMode('parent-login')} className="bg-rose-600/90 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm">🚪 安全登出</button>
+                                <button onClick={() => setViewMode('parent-login')} className="bg-rose-600/90 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-xs font-black transition shadow-sm">🚪 安全登出</button>
                             )}
                         </div>
                     </nav>
@@ -1586,7 +1642,7 @@
                         {viewMode === 'parent-login' && (
                             <main className="no-print flex-grow flex flex-col justify-center items-center px-4 py-12">
                                 <div className="w-full max-w-xl text-center mb-8 animate-fade-in">
-                                    <div className="inline-block bg-emerald-100 text-emerald-800 font-bold px-4 py-1.5 rounded-full text-xs mb-3 shadow-inner">
+                                    <div className="inline-block bg-emerald-100 text-emerald-800 font-black px-4 py-1.5 rounded-full text-xs mb-3 shadow-inner">
                                         班級經營與智慧診斷工具 ♥ {settings.className}專屬
                                     </div>
                                     <h2 
@@ -1596,24 +1652,24 @@
                                     >
                                         {settings.className} 成績通知單查詢系統
                                     </h2>
-                                    <p className="text-slate-500 text-sm">歡迎登入系統，線上即時查看、自主登記範圍成績，並獲取專家級智慧學科診斷！</p>
+                                    <p className="text-slate-500 text-sm font-bold">歡迎登入系統，線上即時查看、自主登記範圍成績，並獲取專家級智慧學科診斷！</p>
                                 </div>
 
                                 <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-100 max-w-md w-full relative overflow-hidden p-8 animate-fade-in">
                                     <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#00704A] to-[#CBA258]"></div>
                                     <div className="space-y-4">
-                                        <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-1.5 border-b pb-3">
+                                        <h3 className="text-base font-black text-slate-800 mb-4 flex items-center gap-1.5 border-b pb-3">
                                             <span className="p-1 bg-green-50 text-[#00704A] rounded">👤</span> 學生與家長查詢通道
                                         </h3>
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">座號 (範例：1、2...21)</label>
-                                            <input type="text" placeholder="請輸入座號" className="w-full p-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00704A]" value={loginData.seatNo} onChange={e => setLoginData({...loginData, seatNo: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleParentLogin()} />
+                                            <label className="block text-xs font-black text-slate-500 mb-1">座號 (範例：1、2...21)</label>
+                                            <input type="text" placeholder="請輸入座號" className="w-full p-3 bg-slate-50 border rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#00704A]" value={loginData.seatNo} onChange={e => setLoginData({...loginData, seatNo: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleParentLogin()} />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">查詢密碼</label>
-                                            <input type="password" placeholder="請輸入密碼 (未修改預設同座號)" className="w-full p-3 bg-slate-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00704A]" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleParentLogin()} />
+                                            <label className="block text-xs font-black text-slate-500 mb-1">查詢密碼</label>
+                                            <input type="password" placeholder="請輸入密碼 (未修改預設同座號)" className="w-full p-3 bg-slate-50 border rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#00704A]" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleParentLogin()} />
                                         </div>
-                                        <button onClick={handleParentLogin} className="w-full bg-[#00704A] hover:bg-[#005a3c] text-white py-3.5 rounded-xl font-bold transition shadow-lg active:scale-95 no-zoom-click">
+                                        <button onClick={handleParentLogin} className="w-full bg-[#00704A] hover:bg-[#005a3c] text-white py-3.5 rounded-xl font-black transition shadow-lg active:scale-95 no-zoom-click">
                                             🚀 登入查看與登記成績
                                         </button>
                                     </div>
@@ -1624,9 +1680,32 @@
                         {/* ================= 家長/單一學生 預覽頁 ================= */}
                         {viewMode === 'parent-dashboard' && currentStudent && (
                             <main className="p-6 flex flex-col items-center animate-fade-in block w-full">
+                                
+                                {/* ⚡ 逾期未登記超大警示 */}
+                                {(() => {
+                                    const overdue = getOverdueSubjects(currentStudent);
+                                    if (overdue.length > 0) {
+                                        return (
+                                            <div className="w-full max-w-5xl bg-rose-600 border-4 border-rose-800 text-white p-5 rounded-2xl shadow-2xl mb-6 flex items-center gap-4 animate-pulse mx-auto">
+                                                <span className="text-4xl sm:text-5xl">🚨</span>
+                                                <div>
+                                                    <h2 className="text-lg sm:text-xl font-black">緊急提醒：您有逾期未登記的成績！</h2>
+                                                    <p className="text-sm font-bold mt-1.5 leading-relaxed">
+                                                        下列考試日期已過兩天，請您盡速補齊登錄成績以免影響您的學術診斷與班級平均計算：<br/>
+                                                        <span className="bg-white text-rose-700 px-2 py-1 rounded inline-block mt-2 font-black shadow-sm">
+                                                            {overdue.map(s => s.name).join('、')}
+                                                        </span>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
+
                                 <div className="no-print w-full max-w-5xl flex justify-between gap-3 mb-4 mx-auto">
-                                    <button onClick={() => { setViewMode('parent-login'); setEditingSubject(null); setLoginData({ ...loginData, seatNo: '', password: '' }); }} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition">← 安全登出返回</button>
-                                    <button onClick={() => window.print()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition shadow-md">🖨️ 列印成績通知單</button>
+                                    <button onClick={() => { setViewMode('parent-login'); setEditingSubject(null); setLoginData({ ...loginData, seatNo: '', password: '' }); }} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-sm font-black transition">← 安全登出返回</button>
+                                    <button onClick={() => window.print()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-sm font-black transition shadow-md">🖨️ 列印成績通知單</button>
                                 </div>
                                 
                                 {renderReportCard(currentStudent, true)}
@@ -1638,12 +1717,12 @@
                             <main className="bg-slate-200 p-6 flex flex-col items-center block w-full">
                                 <div className="no-print w-full max-w-5xl flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-300 sticky top-4 z-10 mx-auto">
                                     <div>
-                                        <h2 className="font-black text-slate-800">🖨️ 批次列印全班成績單預覽</h2>
-                                        <p className="text-xs text-slate-500">共 {students.length} 位學生。點擊列印後，每位學生會自動獨立印成一張 A4。</p>
+                                        <h2 className="font-black text-slate-800 text-lg">🖨️ 批次列印全班成績單預覽</h2>
+                                        <p className="text-xs font-bold text-slate-500">共 {students.length} 位學生。點擊列印後，每位學生會自動獨立印成一張 A4。</p>
                                     </div>
                                     <div className="flex gap-3">
-                                        <button onClick={() => setViewMode('teacher-dashboard')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition border border-slate-300">← 返回教師後台</button>
-                                        <button onClick={() => window.print()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition shadow-md">🖨️ 開始批次列印 ({students.length} 頁)</button>
+                                        <button onClick={() => setViewMode('teacher-dashboard')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-black transition border border-slate-300">← 返回教師後台</button>
+                                        <button onClick={() => window.print()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-xs font-black transition shadow-md">🖨️ 開始批次列印 ({students.length} 頁)</button>
                                     </div>
                                 </div>
                                 
@@ -1664,10 +1743,10 @@
                                     </div>
 
                                     {(() => {
-                                        const stats = getAnalyticsData();
-                                        if (!stats) return <div className="p-12 text-center text-slate-500 font-bold">載入中...</div>;
+                                        const analyticsData = getAnalyticsData();
+                                        if (!analyticsData) return <div className="p-12 text-center text-slate-500 font-bold">載入中...</div>;
                                         
-                                        if (!stats.isLoaded) return (
+                                        if (!analyticsData.isLoaded) return (
                                             <div className="p-16 flex flex-col items-center justify-center gap-4 text-center">
                                                 <span className="text-5xl text-slate-300 animate-pulse">⏳</span>
                                                 <h3 className="text-xl font-bold text-slate-600">正在嘗試獲取學生資料...</h3>
@@ -1677,47 +1756,47 @@
                                             </div>
                                         );
 
-                                        if (stats.count === 0) return <div className="p-12 text-center text-slate-500 font-bold text-lg">⚠️ 該科目目前尚未有任何學生成績紀錄。</div>;
+                                        if (analyticsData.count === 0) return <div className="p-12 text-center text-slate-500 font-bold text-lg">⚠️ 該科目目前尚未有任何學生成績紀錄。</div>;
 
                                         return (
                                             <div className="p-6 sm:p-8">
                                                 <div className="grid grid-cols-3 gap-4 mb-8">
                                                     <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center">
                                                         <span className="text-xs font-bold text-blue-600 mb-1">📈 最高分</span>
-                                                        <span className="text-3xl sm:text-4xl font-black text-blue-800">{stats.max}</span>
+                                                        <span className="text-3xl sm:text-4xl font-black text-blue-800">{analyticsData.max}</span>
                                                     </div>
                                                     <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center">
                                                         <span className="text-xs font-bold text-emerald-600 mb-1">🎯 平均分</span>
-                                                        <span className="text-3xl sm:text-4xl font-black text-emerald-800">{stats.avg}</span>
+                                                        <span className="text-3xl sm:text-4xl font-black text-emerald-800">{analyticsData.avg}</span>
                                                     </div>
                                                     <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center">
                                                         <span className="text-xs font-bold text-rose-600 mb-1">📉 最低分</span>
-                                                        <span className="text-3xl sm:text-4xl font-black text-rose-800">{stats.min}</span>
+                                                        <span className="text-3xl sm:text-4xl font-black text-rose-800">{analyticsData.min}</span>
                                                     </div>
                                                 </div>
 
                                                 <div className="bg-slate-50 border border-slate-200 rounded-3xl p-5 mb-8">
-                                                    <h4 className="font-bold text-slate-700 mb-4 border-b border-slate-200 pb-2">📋 成績級距分佈 (共 {stats.count} 人已登記)</h4>
+                                                    <h4 className="font-bold text-slate-700 mb-4 border-b border-slate-200 pb-2">📋 成績級距分佈 (共 {analyticsData.count} 人已登記)</h4>
                                                     <div className="flex flex-wrap gap-3 sm:gap-4 justify-between sm:justify-center">
                                                         <div className="text-center bg-white border border-slate-200 rounded-xl px-4 py-3 flex-1 min-w-[80px]">
                                                             <div className="text-[10px] text-slate-500 font-bold">90-100分</div>
-                                                            <div className="text-xl font-black text-blue-600 mt-1">{stats.ranges.A} 人</div>
+                                                            <div className="text-xl font-black text-blue-600 mt-1">{analyticsData.ranges.A} 人</div>
                                                         </div>
                                                         <div className="text-center bg-white border border-slate-200 rounded-xl px-4 py-3 flex-1 min-w-[80px]">
                                                             <div className="text-[10px] text-slate-500 font-bold">80-89分</div>
-                                                            <div className="text-xl font-black text-emerald-600 mt-1">{stats.ranges.B} 人</div>
+                                                            <div className="text-xl font-black text-emerald-600 mt-1">{analyticsData.ranges.B} 人</div>
                                                         </div>
                                                         <div className="text-center bg-white border border-slate-200 rounded-xl px-4 py-3 flex-1 min-w-[80px]">
                                                             <div className="text-[10px] text-slate-500 font-bold">70-79分</div>
-                                                            <div className="text-xl font-black text-amber-500 mt-1">{stats.ranges.C} 人</div>
+                                                            <div className="text-xl font-black text-amber-500 mt-1">{analyticsData.ranges.C} 人</div>
                                                         </div>
                                                         <div className="text-center bg-white border border-slate-200 rounded-xl px-4 py-3 flex-1 min-w-[80px]">
                                                             <div className="text-[10px] text-slate-500 font-bold">60-69分</div>
-                                                            <div className="text-xl font-black text-orange-500 mt-1">{stats.ranges.D} 人</div>
+                                                            <div className="text-xl font-black text-orange-500 mt-1">{analyticsData.ranges.D} 人</div>
                                                         </div>
                                                         <div className="text-center bg-white border border-slate-200 rounded-xl px-4 py-3 flex-1 min-w-[80px]">
                                                             <div className="text-[10px] text-slate-500 font-bold">不及格</div>
-                                                            <div className="text-xl font-black text-rose-600 mt-1">{stats.ranges.E} 人</div>
+                                                            <div className="text-xl font-black text-rose-600 mt-1">{analyticsData.ranges.E} 人</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1752,17 +1831,17 @@
                             <main className="no-print p-4 sm:p-6 pb-24 max-w-[1600px] w-full mx-auto animate-fade-in block">
                                 <div className="flex flex-col xl:flex-row gap-6 items-start">
                                     
-                                    {/* 左側設定區 */}
+                                    {/* ⚡ 左側設定區 */}
                                     <div className="w-full xl:w-96 shrink-0 flex flex-col gap-5">
                                         
                                         {/* Card 1: 班級管理設定 */}
-                                        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl flex flex-col gap-4">
-                                            <h3 className="font-black text-slate-800 text-lg pb-3 border-b">⚙️ 系統基本設定</h3>
+                                        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xl flex flex-col gap-4">
+                                            <h3 className="font-black text-slate-800 text-xl pb-2 border-b">⚙️ 系統基本設定</h3>
                                             
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-2 gap-3">
                                                 <div>
-                                                    <label className="block text-[11px] font-bold text-slate-500 mb-1">本次考試類型</label>
-                                                    <select className="w-full p-2 bg-indigo-50 border border-indigo-100 text-indigo-800 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500" value={settings.examType || '一般'} onChange={e => { const s = {...settings, examType: e.target.value}; setSettings(s); saveSettingsToCloud(s); }}>
+                                                    <label className="block text-xs sm:text-sm font-black text-slate-600 mb-1">本次考試類型</label>
+                                                    <select className="w-full p-2 bg-indigo-50 border border-indigo-100 text-indigo-800 rounded-xl text-sm font-black focus:ring-2 focus:ring-indigo-500" value={settings.examType || '一般'} onChange={e => { const s = {...settings, examType: e.target.value}; setSettings(s); saveSettingsToCloud(s); }}>
                                                         <option value="一般">平時測驗(隱藏排名)</option>
                                                         <option value="段考">段考(顯示班/校排)</option>
                                                         <option value="模擬考">模擬考(顯示排名)</option>
@@ -1770,8 +1849,8 @@
                                                 </div>
 
                                                 <div>
-                                                    <label className="block text-[11px] font-bold text-slate-500 mb-1">AI 診斷語氣</label>
-                                                    <select className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-bold" value={settings.gradingTone} onChange={e => { const s = {...settings, gradingTone: e.target.value}; setSettings(s); saveSettingsToCloud(s); }}>
+                                                    <label className="block text-xs sm:text-sm font-black text-slate-600 mb-1">AI 診斷語氣</label>
+                                                    <select className="w-full p-2 bg-slate-50 border rounded-xl text-sm font-black text-slate-700" value={settings.gradingTone} onChange={e => { const s = {...settings, gradingTone: e.target.value}; setSettings(s); saveSettingsToCloud(s); }}>
                                                         <option value="溫和鼓勵">溫和鼓勵 🌸</option>
                                                         <option value="積極督促">積極督促 ⚡</option>
                                                         <option value="嚴格警示">嚴格警示 🔥</option>
@@ -1779,25 +1858,23 @@
                                                 </div>
 
                                                 <div className="col-span-2">
-                                                    <label className="block text-[11px] font-bold text-slate-500 mb-1">任課老師分析面板密碼 <span className="text-emerald-600">(保護成績分布隱私)</span></label>
-                                                    <input type="text" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#00704A] outline-none" value={settings.subjectTeacherPassword || 'T315'} onChange={e => { const s = {...settings, subjectTeacherPassword: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} placeholder="設定任課老師密碼，預設為 T315" />
+                                                    <label className="block text-xs sm:text-sm font-black text-slate-600 mb-1">任課老師面板密碼 <span className="text-emerald-600 text-xs">(保護成績隱私)</span></label>
+                                                    <input type="text" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-700 focus:ring-2 focus:ring-[#00704A] outline-none" value={settings.subjectTeacherPassword || 'T315'} onChange={e => { const s = {...settings, subjectTeacherPassword: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} placeholder="預設為 T315" />
                                                 </div>
                                             </div>
 
                                             <div>
-                                                <label className="block text-[11px] font-bold text-slate-500 mb-1">列印總備註內容</label>
-                                                <textarea rows="2" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs" value={settings.printRemark} onChange={e => { const s = {...settings, printRemark: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} />
+                                                <label className="block text-xs sm:text-sm font-black text-slate-600 mb-1">列印總備註內容</label>
+                                                <textarea rows="2" className="w-full p-2.5 bg-slate-50 border rounded-xl text-sm font-bold text-slate-700" value={settings.printRemark} onChange={e => { const s = {...settings, printRemark: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} />
                                             </div>
 
-                                            {/* 家長/學生端成績顯示區間 UI */}
-                                            <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 mt-2">
-                                                <label className="block text-[11px] font-bold text-indigo-700 mb-2">📅 家長與學生端成績顯示區間 (雙邊留空代表全顯示)</label>
+                                            <div className="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 mt-1">
+                                                <label className="block text-xs sm:text-sm font-black text-indigo-700 mb-2">📅 成績顯示區間 (留空為全顯示)</label>
                                                 <div className="flex items-center gap-2">
-                                                    <input type="date" className="flex-1 p-2 bg-white border border-indigo-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" value={settings.displayStartDate || ''} onChange={e => { const s = {...settings, displayStartDate: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} />
-                                                    <span className="text-indigo-400 font-bold">~</span>
-                                                    <input type="date" className="flex-1 p-2 bg-white border border-indigo-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none" value={settings.displayEndDate || ''} onChange={e => { const s = {...settings, displayEndDate: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} />
+                                                    <input type="date" className="flex-1 p-2 bg-white border border-indigo-200 rounded-lg text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700" value={settings.displayStartDate || ''} onChange={e => { const s = {...settings, displayStartDate: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} />
+                                                    <span className="text-indigo-500 font-black">~</span>
+                                                    <input type="date" className="flex-1 p-2 bg-white border border-indigo-200 rounded-lg text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700" value={settings.displayEndDate || ''} onChange={e => { const s = {...settings, displayEndDate: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} />
                                                 </div>
-                                                <p className="text-[10px] text-indigo-500 mt-1.5 font-medium">※ 啟用區間時，未設定「日期」的考試會自動隱藏，請確保左側考科皆有填寫日期。</p>
                                             </div>
 
                                             <div className="grid grid-cols-2 gap-y-3 gap-x-2 border-t pt-3">
@@ -1811,8 +1888,8 @@
                                                                  key === 'Progress' ? 'showProgress' : 
                                                                  key === 'RadarChart' ? 'showRadarChart' : 'enableComments';
                                                     return (
-                                                        <label key={prop} className="flex items-center gap-2 cursor-pointer text-[11px] font-bold text-slate-600">
-                                                            <input type="checkbox" checked={settings[prop] !== false} onChange={e => { const s = {...settings}; s[prop] = e.target.checked; setSettings(s); saveSettingsToCloud(s); }} className="rounded text-[#00704A] w-3.5 h-3.5 focus:ring-0" />
+                                                        <label key={prop} className="flex items-center gap-2 cursor-pointer text-xs font-black text-slate-700">
+                                                            <input type="checkbox" checked={settings[prop] !== false} onChange={e => { const s = {...settings}; s[prop] = e.target.checked; setSettings(s); saveSettingsToCloud(s); }} className="rounded text-[#00704A] w-4 h-4 focus:ring-0" />
                                                             <span className="truncate">{label}</span>
                                                         </label>
                                                     )
@@ -1823,68 +1900,62 @@
                                         {/* Card 2: 考科與範圍設定 */}
                                         <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xl flex flex-col gap-4">
                                             <div className="flex justify-between items-center border-b pb-2">
-                                                <h4 className="font-bold flex items-center gap-2 text-slate-800"><span className="text-lg">📚</span> 考試項目設定</h4>
+                                                <h4 className="font-black flex items-center gap-2 text-slate-800 text-xl"><span className="text-xl">📚</span> 考試項目設定</h4>
                                                 <div className="flex gap-2">
-                                                    <button onClick={() => toggleAllSubjectLocks(false)} className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded border font-bold transition">🔓 開放全科</button>
-                                                    <button onClick={() => toggleAllSubjectLocks(true)} className="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded border font-bold transition">🔒 鎖定全科</button>
-                                                    <button onClick={clearAllSubjectsAndScores} className="text-[11px] bg-rose-100 hover:bg-rose-200 text-rose-700 px-2 py-1 rounded border border-rose-200 font-bold transition">🗑️ 清空全科</button>
+                                                    <button onClick={() => toggleAllSubjectLocks(false)} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded border font-black transition">🔓 開放全科</button>
+                                                    <button onClick={() => toggleAllSubjectLocks(true)} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded border font-black transition">🔒 鎖定全科</button>
                                                 </div>
                                             </div>
 
-                                            {/* --- 獨立的新增單一考試表單 --- */}
                                             <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 flex flex-col gap-2 shadow-inner">
-                                                <h5 className="font-bold text-[#00704A] text-sm flex items-center gap-1 mb-1"><span>➕</span> 新增單一考試</h5>
+                                                <h5 className="font-black text-[#00704A] text-sm flex items-center gap-1 mb-1"><span>➕</span> 新增單一考試</h5>
                                                 
-                                                <div className="flex flex-col sm:flex-row gap-2 items-end">
-                                                    <div className="flex-1 flex flex-col gap-1 w-full">
-                                                        <label className="text-[10px] text-slate-500 font-bold">科目</label>
-                                                        {newSubjectName === '自訂' ? (
-                                                            <div className="flex border border-slate-300 rounded-lg bg-white overflow-hidden items-center focus-within:ring-2 focus-within:ring-emerald-500 h-[38px]">
-                                                                <input type="text" placeholder="例: 國防" className="w-full px-2 py-1.5 text-sm outline-none font-bold text-slate-700 bg-transparent animate-fade-in" value={customSubjectName} onChange={e => setCustomSubjectName(e.target.value)} />
-                                                                <button onClick={() => {setNewSubjectName('數學'); setCustomSubjectName('');}} className="px-2 text-slate-400 hover:bg-slate-100 font-bold bg-slate-50 border-l h-full" title="取消自訂">✕</button>
-                                                            </div>
-                                                        ) : (
-                                                            <select className="h-[38px] px-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)}>
-                                                                <option value="國文">國文</option><option value="英文">英文</option><option value="數學">數學</option>
-                                                                <option value="理化">理化</option><option value="歷史">歷史</option><option value="地理">地理</option>
-                                                                <option value="公民">公民</option><option value="生物">生物</option><option value="自訂">➕ 自訂</option>
-                                                            </select>
-                                                        )}
+                                                <div className="flex flex-col gap-2 items-stretch">
+                                                    <div className="flex gap-2 w-full">
+                                                        <div className="flex-1 flex flex-col gap-1">
+                                                            <label className="text-[10px] text-slate-600 font-black">科目</label>
+                                                            {newSubjectName === '自訂' ? (
+                                                                <div className="flex border border-slate-300 rounded-lg bg-white overflow-hidden items-center h-[38px]">
+                                                                    <input type="text" placeholder="例: 國防" className="w-full px-2 py-1.5 text-sm outline-none font-black text-slate-700" value={customSubjectName} onChange={e => setCustomSubjectName(e.target.value)} />
+                                                                    <button onClick={() => {setNewSubjectName('數學'); setCustomSubjectName('');}} className="px-2 text-slate-400 font-bold bg-slate-50 border-l h-full">✕</button>
+                                                                </div>
+                                                            ) : (
+                                                                <select className="h-[38px] px-2 bg-white border border-slate-300 rounded-lg text-sm font-black text-slate-700" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)}>
+                                                                    <option value="國文">國文</option><option value="英文">英文</option><option value="數學">數學</option>
+                                                                    <option value="理化">理化</option><option value="歷史">歷史</option><option value="地理">地理</option>
+                                                                    <option value="公民">公民</option><option value="生物">生物</option><option value="自訂">➕ 自訂</option>
+                                                                </select>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex-1 flex flex-col gap-1">
+                                                            <label className="text-[10px] text-slate-600 font-black">日期</label>
+                                                            <input type="date" className="h-[38px] px-2 bg-white border border-slate-300 rounded-lg text-center text-sm font-bold text-slate-700" value={newSubjectDate} onChange={e => setNewSubjectDate(e.target.value)} />
+                                                        </div>
                                                     </div>
                                                     
-                                                    <div className="flex-[2] flex flex-col gap-1 w-full">
-                                                        <label className="text-[10px] text-slate-500 font-bold">範圍/考試名稱</label>
-                                                        <input type="text" placeholder="例: L1~L2 或是 小考" className="h-[38px] px-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" value={newSubjectScope} onChange={e => setNewSubjectScope(e.target.value)} />
+                                                    <div className="flex flex-col gap-1 w-full">
+                                                        <label className="text-[10px] text-slate-600 font-black">範圍/考試名稱</label>
+                                                        <input type="text" placeholder="例: L1~L2 或是 小考" className="h-[38px] px-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-700" value={newSubjectScope} onChange={e => setNewSubjectScope(e.target.value)} />
                                                     </div>
 
-                                                    <div className="flex-1 flex flex-col gap-1 w-full">
-                                                        <label className="text-[10px] text-slate-500 font-bold">日期</label>
-                                                        <input type="date" className="h-[38px] px-2 bg-white border border-slate-300 rounded-lg text-center text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-600" value={newSubjectDate} onChange={e => setNewSubjectDate(e.target.value)} />
-                                                    </div>
-
-                                                    <button onClick={handleAddSubject} className="bg-[#1E3932] hover:bg-[#142621] text-white px-4 h-[38px] rounded-lg font-bold transition text-sm flex justify-center items-center shadow-md active:scale-95 w-full sm:w-auto shrink-0">
-                                                        ✅ 新增
+                                                    <button onClick={handleAddSubject} className="bg-[#1E3932] hover:bg-[#142621] text-white py-2 rounded-lg font-black transition text-sm flex justify-center items-center shadow-md mt-1 w-full">
+                                                        ✅ 新增考科
                                                     </button>
                                                 </div>
                                             </div>
 
-                                            {/* --- 批次匯入考科 --- */}
                                             <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                                                <span className="text-xs font-bold text-slate-600">📥 或使用 Excel 批次建檔：</span>
+                                                <span className="text-xs font-black text-slate-700">📥 Excel 批次建檔：</span>
                                                 <div className="flex gap-2">
-                                                    <button onClick={downloadSubjectTemplate} className="text-[11px] text-blue-600 underline font-bold hover:text-blue-800">下載範本</button>
-                                                    <button onClick={() => subjectFileInputRef.current.click()} className="text-[11px] bg-white border border-slate-300 text-slate-700 px-3 py-1.5 rounded-lg font-bold transition shadow-sm hover:bg-slate-100">
-                                                        上傳考科
-                                                    </button>
+                                                    <button onClick={() => subjectFileInputRef.current.click()} className="text-[11px] bg-white border border-slate-300 text-slate-700 px-3 py-1.5 rounded-lg font-black transition shadow-sm hover:bg-slate-100">上傳</button>
                                                     <input type="file" ref={subjectFileInputRef} className="hidden" accept=".xlsx, .csv" onChange={e => handleSubjectExcelUpload(e.target.files[0])} />
                                                 </div>
                                             </div>
 
-                                            {/* --- 已建立的考試列表 --- */}
                                             <div className="mt-2 border-t pt-3">
-                                                <h5 className="font-bold text-slate-700 text-sm mb-2 flex items-center justify-between">
+                                                <h5 className="font-black text-slate-800 text-base mb-2 flex items-center justify-between">
                                                     📋 已建立的考試項目
-                                                    <span className="text-[10px] font-normal text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">共 {settings.subjects.length} 項</span>
+                                                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-full">共 {settings.subjects.length} 項</span>
                                                 </h5>
                                                 <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
                                                     {settings.subjects.map(sub => {
@@ -1893,33 +1964,33 @@
                                                                 <div className="font-black text-blue-800 text-sm mb-1">✏️ 修改設定：{sub.name}</div>
                                                                 <div className="flex flex-col sm:flex-row gap-2 items-end">
                                                                     <div className="flex-[2] w-full">
-                                                                        <label className="text-[10px] text-blue-600 font-bold">範圍/標題</label>
-                                                                        <input type="text" className="w-full px-2 border border-blue-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 h-[38px]" placeholder="範圍" value={editingSubjectConfig.scope} onChange={e => setEditingSubjectConfig({...editingSubjectConfig, scope: e.target.value})} />
+                                                                        <label className="text-xs text-blue-700 font-black">範圍/標題</label>
+                                                                        <input type="text" className="w-full px-2 border border-blue-200 rounded-lg bg-white text-sm font-bold h-[38px]" value={editingSubjectConfig.scope} onChange={e => setEditingSubjectConfig({...editingSubjectConfig, scope: e.target.value})} />
                                                                     </div>
                                                                     <div className="flex-1 w-full">
-                                                                        <label className="text-[10px] text-blue-600 font-bold">日期</label>
-                                                                        <input type="date" className="w-full px-2 border border-blue-200 rounded-lg bg-white text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-400 h-[38px]" value={toDateInputFormat(editingSubjectConfig.date)} onChange={e => setEditingSubjectConfig({...editingSubjectConfig, date: e.target.value})} />
+                                                                        <label className="text-xs text-blue-700 font-black">日期</label>
+                                                                        <input type="date" className="w-full px-2 border border-blue-200 rounded-lg bg-white text-sm font-bold text-center h-[38px]" value={toDateInputFormat(editingSubjectConfig.date)} onChange={e => setEditingSubjectConfig({...editingSubjectConfig, date: e.target.value})} />
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex justify-end gap-2 mt-2">
-                                                                    <button onClick={() => setEditingSubjectConfig(null)} className="px-4 py-2 text-slate-600 bg-white border border-slate-300 rounded-lg text-xs font-bold transition hover:bg-slate-50">取消</button>
+                                                                    <button onClick={() => setEditingSubjectConfig(null)} className="px-4 py-2 text-slate-600 bg-white border border-slate-300 rounded-lg text-xs font-black">取消</button>
                                                                     <button onClick={() => {
                                                                         const newSubjects = settings.subjects.map(s => s && s.name === sub.name ? {...s, scope: editingSubjectConfig.scope, date: editingSubjectConfig.date} : s);
                                                                         const newSettings = {...settings, subjects: newSubjects};
                                                                         setSettings(newSettings);
                                                                         saveSettingsToCloud(newSettings);
                                                                         setEditingSubjectConfig(null);
-                                                                    }} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-md">💾 儲存修改</button>
+                                                                    }} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-black shadow-md">💾 儲存修改</button>
                                                                 </div>
                                                             </div>
                                                         ) : (
-                                                            <div key={sub.name} className="flex flex-col py-3 px-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-colors">
+                                                            <div key={sub.name} className="flex flex-col py-3 px-4 bg-white rounded-xl border border-slate-200 shadow-sm">
                                                                 <div className="flex flex-col min-w-0">
                                                                     <div className="flex items-baseline gap-2 flex-wrap">
-                                                                        <span className="font-black text-slate-800 text-base">{sub.name}</span>
-                                                                        <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{sub.date || '未設定日期'}</span>
+                                                                        <span className="font-black text-slate-800 text-lg">{sub.name}</span>
+                                                                        <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{sub.date || '未設定日期'}</span>
                                                                     </div>
-                                                                    <span className="text-sm text-slate-600 truncate mt-1">{sub.scope || '未設定範圍'}</span>
+                                                                    <span className="text-sm font-bold text-slate-600 truncate mt-1">{sub.scope || '未設定範圍'}</span>
                                                                 </div>
                                                                 <div className="flex items-center justify-between gap-3 w-full border-t pt-2 mt-2">
                                                                     <label className="flex items-center gap-1.5 cursor-pointer shrink-0 bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-200">
@@ -1928,11 +1999,11 @@
                                                                             const s = {...settings, subjects: newSubjects};
                                                                             setSettings(s); saveSettingsToCloud(s);
                                                                         }} />
-                                                                        <span className={sub.locked ? "text-rose-600 font-bold text-xs" : "text-emerald-600 font-bold text-xs"}>{sub.locked ? "鎖定" : "開放"}</span>
+                                                                        <span className={sub.locked ? "text-rose-600 font-black text-xs" : "text-emerald-600 font-black text-xs"}>{sub.locked ? "鎖定" : "開放"}</span>
                                                                     </label>
                                                                     <div className="flex gap-2">
-                                                                        <button onClick={() => setEditingSubjectConfig({ originalName: sub.name, scope: sub.scope, date: sub.date })} className="flex items-center gap-1 text-blue-600 hover:bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg text-xs font-bold transition"><span>✏️</span> 修改</button>
-                                                                        <button onClick={() => handleDeleteSubject(sub.name)} className="flex items-center gap-1 text-rose-600 hover:bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg text-xs font-bold transition"><span>🗑️</span> 刪除</button>
+                                                                        <button onClick={() => setEditingSubjectConfig({ originalName: sub.name, scope: sub.scope, date: sub.date })} className="text-blue-600 border border-blue-200 px-2 py-1 rounded-lg text-xs font-black">✏️ 修改</button>
+                                                                        <button onClick={() => handleDeleteSubject(sub.name)} className="text-rose-600 border border-rose-200 px-2 py-1 rounded-lg text-xs font-black">🗑️ 刪除</button>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -1941,8 +2012,7 @@
                                                     {settings.subjects.length === 0 && (
                                                         <div className="text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 py-8">
                                                             <span className="text-3xl mb-2 block">📝</span>
-                                                            <p className="text-slate-500 text-sm font-bold">目前尚未建立任何考試項目</p>
-                                                            <p className="text-slate-400 text-xs mt-1">請使用上方表單新增，或是使用 Excel 匯入</p>
+                                                            <p className="text-slate-500 text-sm font-black">目前尚未建立任何考試項目</p>
                                                         </div>
                                                     )}
                                                 </div>
@@ -1954,145 +2024,133 @@
                                     <div className="flex-1 flex flex-col gap-5 w-full min-w-0">
                                         
                                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                                            <div onDragOver={e => {e.preventDefault();setExcelDragActive(true);}} onDragLeave={() => {setExcelDragActive(false);}} onDrop={e => {e.preventDefault();setExcelDragActive(false);handleFileUpload(e.dataTransfer.files[0]);}} className={`p-8 border-2 border-dashed rounded-[2rem] text-center flex flex-col items-center justify-center transition ${excelDragActive ? 'border-[#00704A] bg-emerald-50' : 'bg-white'}`}>
-                                                <span className="text-4xl mb-2">🧑‍🎓</span>
-                                                <h4 className="font-bold text-sm">拖放 Excel / CSV 批次匯入【名單與成績】</h4>
-                                                <p className="text-[10px] text-slate-500 mt-1">系統將自動保護學生姓名(例如：王O明)</p>
+                                            <div onDragOver={e => {e.preventDefault();setExcelDragActive(true);}} onDragLeave={() => {setExcelDragActive(false);}} onDrop={e => {e.preventDefault();setExcelDragActive(false);handleFileUpload(e.dataTransfer.files[0]);}} className={`p-6 border-2 border-dashed rounded-[2rem] text-center flex flex-col items-center justify-center transition ${excelDragActive ? 'border-[#00704A] bg-emerald-50' : 'bg-white'}`}>
+                                                <span className="text-5xl mb-2">🧑‍🎓</span>
+                                                <h4 className="font-black text-base mt-2">拖放 Excel / CSV 批次匯入</h4>
+                                                <p className="text-xs text-slate-500 font-bold mt-1">系統將自動保護學生姓名(例如：王O明)</p>
                                                 <div className="flex flex-wrap gap-2 mt-4 justify-center">
-                                                    <button onClick={() => fileInputRef.current.click()} className="bg-slate-700 hover:bg-slate-800 text-white text-xs px-4 py-2 rounded-xl font-bold transition shadow-md">📤 匯入名單與成績</button>
-                                                    
-                                                    <button onClick={openQuickScore} className="bg-[#00704A] hover:bg-[#005a3c] text-white text-xs px-4 py-2 rounded-xl font-black transition shadow-md flex items-center gap-1 border border-emerald-700">
-                                                        <span>📋</span> 貼上/登記 單科成績
-                                                    </button>
-
-                                                    <button onClick={loadDemoData} className="bg-[#CBA258] hover:bg-[#b08b45] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-md">一鍵載入正式名單</button>
-                                                    <button onClick={downloadStudentTemplate} className="bg-emerald-100 hover:bg-emerald-200 text-[#00704A] font-bold text-xs px-3.5 py-2 rounded-xl transition">📥 下載範本</button>
-                                                    <button onClick={clearDatabase} className="bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs px-3.5 py-2 rounded-xl border border-rose-300 transition">清空資料</button>
-                                                    <button onClick={exportGradesToCSV} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">💾 匯出 Excel</button>
+                                                    <button onClick={() => fileInputRef.current.click()} className="bg-slate-800 text-white text-sm px-4 py-2.5 rounded-xl font-black shadow-md">📤 匯入名單與成績</button>
+                                                    <button onClick={openQuickScore} className="bg-[#00704A] text-white text-sm px-4 py-2.5 rounded-xl font-black shadow-md border border-emerald-700">📋 貼上/登記 單科成績</button>
+                                                    <button onClick={loadDemoData} className="bg-[#CBA258] text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-md">一鍵載入正式名單</button>
+                                                    <button onClick={downloadStudentTemplate} className="bg-emerald-100 text-[#00704A] font-black text-xs px-3.5 py-2 rounded-xl">📥 下載範本</button>
+                                                    <button onClick={exportGradesToCSV} className="bg-blue-600 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-sm">💾 匯出 Excel</button>
                                                 </div>
                                                 <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .csv" onChange={e => handleFileUpload(e.target.files[0])} />
                                             </div>
 
-                                            <div className="bg-white p-6 rounded-[2rem] border shadow-xl grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                            <div className="bg-white p-5 rounded-[2rem] border shadow-xl grid grid-cols-2 sm:grid-cols-3 gap-3">
                                                 <div className="bg-slate-50 p-4 rounded-2xl border">
-                                                    <span className="block text-[10px] font-bold">總學生數</span>
-                                                    <span className="block text-2xl font-black text-[#00704A] mt-1">{students.length}</span>
+                                                    <span className="block text-xs font-black text-slate-500">總學生數</span>
+                                                    <span className="block text-3xl font-black text-[#00704A] mt-1">{students.length}</span>
                                                 </div>
                                                 <div className="bg-slate-50 p-4 rounded-2xl border">
-                                                    <span className="block text-[10px] font-bold">總計登入次數</span>
-                                                    <span className="block text-2xl font-black text-amber-500 mt-1">
+                                                    <span className="block text-xs font-black text-slate-500">總計登入次數</span>
+                                                    <span className="block text-3xl font-black text-amber-500 mt-1">
                                                         {students.reduce((acc, curr) => acc + (curr.loginCount || 0), 0)}
                                                     </span>
                                                 </div>
                                                 <div className="bg-slate-50 p-4 rounded-2xl border">
-                                                    <span className="block text-[10px] font-bold">班級總平均</span>
-                                                    <span className="block text-2xl font-black text-indigo-700 mt-1">{stats.avg.toFixed(1)}</span>
+                                                    <span className="block text-xs font-black text-slate-500">班級總平均</span>
+                                                    <span className="block text-3xl font-black text-indigo-700 mt-1">{classGradeStats.avg.toFixed(1)}</span>
                                                 </div>
                                                 <div className="bg-slate-50 p-4 rounded-2xl border col-span-2 sm:col-span-3 flex justify-between items-center">
-                                                    <div className="text-xs text-slate-500 font-bold">A級:{stats.A} | B級:{stats.B} | C級:{stats.C} | 總不及格:{stats.E}</div>
+                                                    <div className="text-sm text-slate-600 font-black">A級:{classGradeStats.A} | B級:{classGradeStats.B} | C級:{classGradeStats.C} | 總不及格:{classGradeStats.E}</div>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* 系統安全備份區塊 */}
-                                        <div className="bg-slate-800 p-5 rounded-3xl border border-slate-700 shadow-lg flex flex-col sm:flex-row justify-between items-center gap-4 text-slate-300">
+                                        <div className="bg-slate-800 p-5 rounded-3xl border border-slate-700 shadow-lg flex flex-col sm:flex-row justify-between items-center gap-4">
                                             <div>
-                                                <h4 className="font-bold text-white flex items-center gap-2"><span>🛡️</span> 系統安全與資料備份</h4>
-                                                <p className="text-xs mt-1">匯出 JSON 格式以完整備份「所有設定與學生成績」。若有遺失可隨時還原。</p>
+                                                <h4 className="font-black text-white text-lg flex items-center gap-2"><span>🛡️</span> 系統安全與資料備份</h4>
+                                                <p className="text-xs text-slate-300 font-bold mt-1">匯出 JSON 格式以完整備份「所有設定與學生成績」。若有遺失可隨時還原。</p>
                                             </div>
                                             <div className="flex gap-2">
-                                                <button onClick={() => backupFileInputRef.current.click()} className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-4 py-2.5 rounded-xl font-bold transition">
-                                                    🔄 從備份還原
-                                                </button>
-                                                <button onClick={exportBackupJSON} className="bg-amber-500 hover:bg-amber-600 text-amber-950 text-xs px-4 py-2.5 rounded-xl font-bold transition shadow-md">
-                                                    💾 下載完整備份
-                                                </button>
+                                                <button onClick={() => backupFileInputRef.current.click()} className="bg-slate-700 text-white text-sm px-4 py-2.5 rounded-xl font-black">🔄 從備份還原</button>
+                                                <button onClick={exportBackupJSON} className="bg-amber-500 text-amber-950 text-sm px-4 py-2.5 rounded-xl font-black shadow-md">💾 下載完整備份</button>
                                                 <input type="file" ref={backupFileInputRef} className="hidden" accept=".json" onChange={e => importBackupJSON(e.target.files[0])} />
                                             </div>
                                         </div>
 
-                                        {/* 班級名冊與成績總覽 */}
                                         <div className="bg-white rounded-[2rem] border shadow-xl flex flex-col relative pb-4 mb-8">
                                             <div className="p-5 border-b flex justify-between items-center bg-slate-50 flex-wrap gap-2 rounded-t-[2rem]">
-                                                <h4 className="font-black flex items-center gap-2"><span>📋</span>班級名冊與成績總覽</h4>
+                                                <h4 className="font-black text-xl flex items-center gap-2"><span>📋</span>班級名冊與成績總覽</h4>
                                                 <div className="flex gap-2 flex-wrap">
-                                                    <button onClick={openQuickScore} className="bg-[#00704A] hover:bg-[#005a3c] text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-md transition-all active:scale-95">📋 貼上/快速登記 單科</button>
-                                                    <button onClick={() => setViewMode('batch-print')} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-md transition-all active:scale-95">🖨️ 列印全班成績單</button>
-                                                    <button onClick={() => setShowAddStudent(!showAddStudent)} className="bg-slate-200 text-slate-800 hover:bg-slate-300 text-xs font-bold px-3 py-1.5 rounded-xl transition">{showAddStudent ? "❌ 取消" : "➕ 新增單一學生"}</button>
+                                                    <button onClick={openQuickScore} className="bg-[#00704A] text-white text-sm font-black px-4 py-2 rounded-xl shadow-md">📋 貼上單科</button>
+                                                    <button onClick={() => setViewMode('batch-print')} className="bg-indigo-600 text-white text-sm font-black px-4 py-2 rounded-xl shadow-md">🖨️ 列印全班</button>
+                                                    <button onClick={() => setShowAddStudent(!showAddStudent)} className="bg-slate-200 text-slate-800 text-sm font-black px-4 py-2 rounded-xl">{showAddStudent ? "❌ 取消" : "➕ 新增單一學生"}</button>
                                                 </div>
                                             </div>
 
                                             {showAddStudent && (
                                                 <div className="p-5 bg-emerald-50/50 flex flex-wrap gap-4 items-end animate-fade-in border-b border-emerald-100">
                                                     <div className="w-full sm:w-1/4">
-                                                        <input type="text" placeholder="座號 (例:1)" className="w-full p-2 bg-white border rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#00704A] outline-none" value={newStudentData.seatNo} onChange={e => setNewStudentData({...newStudentData, seatNo: e.target.value})} />
+                                                        <input type="text" placeholder="座號 (例:1)" className="w-full p-2 bg-white border rounded-lg text-sm font-black" value={newStudentData.seatNo} onChange={e => setNewStudentData({...newStudentData, seatNo: e.target.value})} />
                                                     </div>
                                                     <div className="w-full sm:w-1/4">
-                                                        <input type="text" placeholder="姓名" className="w-full p-2 bg-white border rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#00704A] outline-none" value={newStudentData.name} onChange={e => setNewStudentData({...newStudentData, name: e.target.value})} />
+                                                        <input type="text" placeholder="姓名" className="w-full p-2 bg-white border rounded-lg text-sm font-black" value={newStudentData.name} onChange={e => setNewStudentData({...newStudentData, name: e.target.value})} />
                                                     </div>
                                                     <div className="w-full sm:w-1/4">
-                                                        <input type="text" placeholder="登入密碼 (未填則預設為座號)" className="w-full p-2 bg-white border rounded-lg text-xs font-bold focus:ring-2 focus:ring-[#00704A] outline-none" value={newStudentData.password} onChange={e => setNewStudentData({...newStudentData, password: e.target.value})} />
+                                                        <input type="text" placeholder="登入密碼" className="w-full p-2 bg-white border rounded-lg text-sm font-black" value={newStudentData.password} onChange={e => setNewStudentData({...newStudentData, password: e.target.value})} />
                                                     </div>
-                                                    <button onClick={handleAddStudent} className="bg-[#00704A] text-white text-xs px-4 py-2 rounded-lg font-bold shadow-md">確定新增</button>
+                                                    <button onClick={handleAddStudent} className="bg-[#00704A] text-white text-sm px-4 py-2 rounded-lg font-black shadow-md">確定新增</button>
                                                 </div>
                                             )}
 
-                                            {/* 完全無高度限制，讓網頁自然往下長 */}
                                             <div className="w-full overflow-x-auto custom-scrollbar animate-fade-in">
-                                                <table className="min-w-full text-center text-xs whitespace-nowrap">
+                                                <table className="min-w-full text-center whitespace-nowrap">
                                                     <thead className="bg-slate-100 outline outline-1 outline-slate-200">
                                                         <tr>
-                                                            <th className="px-4 py-3 font-bold pl-6">座號</th>
-                                                            <th className="px-4 py-3 font-bold">姓名</th>
-                                                            <th className="px-2 py-3 font-bold text-amber-600">密碼</th>
-                                                            <th className="px-2 py-3 font-bold text-slate-500" title="家長登入次數">👁️ 登入</th>
-                                                            {settings.subjects.map(sub => <th key={sub.name} className="px-2 py-3 font-bold" title={`範圍: ${sub.scope || '未填'}`}>{sub.name}</th>)}
-                                                            <th className="px-3 py-3 font-bold text-indigo-700">平均</th>
-                                                            <th className="px-3 py-3 font-bold">總分進步</th>
-                                                            {(settings.examType === '段考' || settings.examType === '模擬考') && <th className="px-2 py-3 font-bold text-indigo-600">班排</th>}
-                                                            {(settings.examType === '段考' || settings.examType === '模擬考') && <th className="px-2 py-3 font-bold text-purple-600">校排</th>}
-                                                            <th className="px-4 py-3 font-bold text-right pr-6">操作</th>
+                                                            <th className="px-4 py-3 font-black text-sm pl-6">座號</th>
+                                                            <th className="px-4 py-3 font-black text-sm">姓名</th>
+                                                            <th className="px-2 py-3 font-black text-sm text-amber-600">密碼</th>
+                                                            <th className="px-2 py-3 font-black text-sm text-slate-500">👁️ 登入</th>
+                                                            {settings.subjects.map(sub => <th key={sub.name} className="px-2 py-3 font-black text-sm" title={`範圍: ${sub.scope || '未填'}`}>{sub.name}</th>)}
+                                                            <th className="px-3 py-3 font-black text-sm text-indigo-700">平均</th>
+                                                            <th className="px-3 py-3 font-black text-sm">總分進步</th>
+                                                            {(settings.examType === '段考' || settings.examType === '模擬考') && <th className="px-2 py-3 font-black text-sm text-indigo-600">班排</th>}
+                                                            {(settings.examType === '段考' || settings.examType === '模擬考') && <th className="px-2 py-3 font-black text-sm text-purple-600">校排</th>}
+                                                            <th className="px-4 py-3 font-black text-sm text-right pr-6">操作</th>
                                                         </tr>
                                                     </thead>
-                                                    <tbody className="divide-y divide-slate-100 font-medium">
+                                                    <tbody className="divide-y divide-slate-100 font-bold">
                                                         {students.map((s, idx) => (
                                                             <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                                <td className="px-4 py-3.5 pl-6 font-bold text-[#00704A]">{s.seatNo}</td>
-                                                                <td className="px-4 py-3.5 font-bold">{s.name}</td>
-                                                                <td className="px-2 py-3.5 font-mono text-[10px] text-amber-600 bg-amber-50/50 rounded">{s.password || s.seatNo}</td>
-                                                                <td className="px-2 py-3.5 font-bold text-slate-500">
-                                                                    {s.loginCount > 0 ? <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{s.loginCount}</span> : "0"}
+                                                                <td className="px-4 py-2 pl-6 font-black text-base text-[#00704A]">{s.seatNo}</td>
+                                                                <td className="px-4 py-2 font-black text-sm">{s.name}</td>
+                                                                <td className="px-2 py-2 font-mono text-[11px] font-black text-amber-700 bg-amber-50/50 rounded">{s.password || s.seatNo}</td>
+                                                                <td className="px-2 py-2 font-black text-sm text-slate-500">
+                                                                    {s.loginCount > 0 ? <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">{s.loginCount}</span> : "0"}
                                                                 </td>
                                                                 {settings.subjects.map(sub => {
                                                                     const sc = getStudentScore(s, sub.name);
                                                                     const avg = calculateClassSubjectAvg(sub.name);
                                                                     const isB = sc !== null && avg > 0 && sc < avg;
-                                                                    return <td key={sub.name} className={`px-2 py-3.5 ${isB ? 'text-rose-600 font-bold bg-rose-50/20' : 'text-slate-500'}`}>{sc !== null ? sc.toFixed(1) : "-"}</td>;
+                                                                    return <td key={sub.name} className={`px-2 py-2 font-black text-sm ${isB ? 'text-rose-600 bg-rose-50/20' : 'text-slate-600'}`}>{sc !== null ? sc.toFixed(1) : "-"}</td>;
                                                                 })}
-                                                                <td className="px-3 py-3.5 font-extrabold text-indigo-700">{calculateStudentAvg(s).toFixed(1)}</td>
-                                                                <td className={`px-3 py-3.5 font-bold whitespace-nowrap ${s.progress > 0 ? 'text-emerald-600' : s.progress < 0 ? 'text-rose-500' : 'text-slate-500'}`}>
+                                                                <td className="px-3 py-2 font-black text-base text-indigo-700">{calculateStudentAvg(s).toFixed(1)}</td>
+                                                                <td className={`px-3 py-2 font-black text-sm whitespace-nowrap ${s.progress > 0 ? 'text-emerald-600' : s.progress < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
                                                                     {s.progress > 0 ? `⬆️ +${s.progress}` : s.progress < 0 ? `⬇️ ${Math.abs(s.progress)}` : "0"}
                                                                 </td>
                                                                 {(settings.examType === '段考' || settings.examType === '模擬考') && (
-                                                                    <td className="px-2 py-3.5 text-center">
-                                                                        <div className="font-bold text-indigo-700">{s.classRank || '-'}</div>
-                                                                        {s.classRankProgress ? <div className={`text-[10px] font-bold ${s.classRankProgress > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{s.classRankProgress > 0 ? `⬆️+${s.classRankProgress}` : `⬇️${Math.abs(s.classRankProgress)}`}</div> : null}
+                                                                    <td className="px-2 py-2 text-center">
+                                                                        <div className="font-black text-sm text-indigo-700">{s.classRank || '-'}</div>
+                                                                        {s.classRankProgress ? <div className={`text-[10px] font-black ${s.classRankProgress > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{s.classRankProgress > 0 ? `⬆️+${s.classRankProgress}` : `⬇️${Math.abs(s.classRankProgress)}`}</div> : null}
                                                                     </td>
                                                                 )}
                                                                 {(settings.examType === '段考' || settings.examType === '模擬考') && (
-                                                                    <td className="px-2 py-3.5 text-center">
-                                                                        <div className="font-bold text-purple-700">{s.schoolRank || '-'}</div>
-                                                                        {s.schoolRankProgress ? <div className={`text-[10px] font-bold ${s.schoolRankProgress > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{s.schoolRankProgress > 0 ? `⬆️+${s.schoolRankProgress}` : `⬇️${Math.abs(s.schoolRankProgress)}`}</div> : null}
+                                                                    <td className="px-2 py-2 text-center">
+                                                                        <div className="font-black text-sm text-purple-700">{s.schoolRank || '-'}</div>
+                                                                        {s.schoolRankProgress ? <div className={`text-[10px] font-black ${s.schoolRankProgress > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{s.schoolRankProgress > 0 ? `⬆️+${s.schoolRankProgress}` : `⬇️${Math.abs(s.schoolRankProgress)}`}</div> : null}
                                                                     </td>
                                                                 )}
-                                                                <td className="px-4 py-3.5 text-right pr-6 whitespace-nowrap">
-                                                                    <button onClick={() => setModifyingStudent(s)} className="text-blue-600 mr-2 hover:scale-110 transition-transform" title="編輯學生密碼與成績">📝</button>
-                                                                    <button onClick={() => handleDeleteStudent(s)} className="text-rose-600 mr-2 hover:scale-110 transition-transform" title="刪除學生">🗑️</button>
-                                                                    <button onClick={() => { setCurrentStudent(s); setViewMode('parent-dashboard'); }} className="text-[#00704A] hover:scale-110 transition-transform" title="預覽該生成績單">🔎</button>
+                                                                <td className="px-4 py-2 text-right pr-6 whitespace-nowrap text-lg">
+                                                                    <button onClick={() => setModifyingStudent(s)} className="text-blue-600 mr-2 hover:scale-125 transition-transform" title="編輯">📝</button>
+                                                                    <button onClick={() => handleDeleteStudent(s)} className="text-rose-600 mr-2 hover:scale-125 transition-transform" title="刪除">🗑️</button>
+                                                                    <button onClick={() => { setCurrentStudent(s); setViewMode('parent-dashboard'); }} className="text-[#00704A] hover:scale-125 transition-transform" title="預覽">🔎</button>
                                                                 </td>
                                                             </tr>
                                                         ))}
-                                                        {students.length === 0 && <tr><td colSpan="20" className="py-12 text-slate-400 font-bold text-sm bg-slate-50">目前尚無資料！請從上方拖放 Excel 或單筆新增。</td></tr>}
+                                                        {students.length === 0 && <tr><td colSpan="20" className="py-12 text-slate-500 font-black text-lg bg-slate-50">目前尚無資料！請從上方拖放 Excel 或單筆新增。</td></tr>}
                                                     </tbody>
                                                 </table>
                                             </div>
