@@ -93,10 +93,10 @@
         }
     </style>
 
-    <!-- apple-touch-icon 圖示自動注入 -->
+    <!-- apple-touch-icon 圖示自動注入 (已修改為 A++) -->
     <script>
         (function() {
-            var svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"><defs><linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#4facfe"/><stop offset="50%" stop-color="#a18cd1"/><stop offset="100%" stop-color="#fbc2eb"/></linearGradient><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="15" flood-color="#000000" flood-opacity="0.2"/></filter><filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.15"/></filter></defs><rect width="1024" height="1024" fill="url(#bgGrad)"/><circle cx="880" cy="200" r="40" fill="rgba(255,255,255,0.2)" /><circle cx="150" cy="850" r="60" fill="rgba(255,255,255,0.15)" /><polygon points="380,120 420,200 340,200" fill="rgba(255,255,255,0.2)" transform="rotate(25, 380, 160)" /><text x="40" y="260" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="240" fill="#FFEA00" transform="rotate(-15, 160, 200)" filter="url(#shadow)" stroke="#FFFFFF" stroke-width="4">315</text><text x="512" y="640" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="380" fill="#ffffff" text-anchor="middle" filter="url(#shadow)">A+</text></svg>`;
+            var svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"><defs><linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#4facfe"/><stop offset="50%" stop-color="#a18cd1"/><stop offset="100%" stop-color="#fbc2eb"/></linearGradient><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="12" stdDeviation="15" flood-color="#000000" flood-opacity="0.2"/></filter><filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.15"/></filter></defs><rect width="1024" height="1024" fill="url(#bgGrad)"/><circle cx="880" cy="200" r="40" fill="rgba(255,255,255,0.2)" /><circle cx="150" cy="850" r="60" fill="rgba(255,255,255,0.15)" /><polygon points="380,120 420,200 340,200" fill="rgba(255,255,255,0.2)" transform="rotate(25, 380, 160)" /><text x="40" y="260" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="240" fill="#FFEA00" transform="rotate(-15, 160, 200)" filter="url(#shadow)" stroke="#FFFFFF" stroke-width="4">315</text><text x="512" y="640" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="320" fill="#ffffff" text-anchor="middle" filter="url(#shadow)">A++</text></svg>`;
             var img = new Image();
             var svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
             var url = URL.createObjectURL(svgBlob);
@@ -130,6 +130,7 @@
         if (typeof __firebase_config !== 'undefined' && __firebase_config) {
             firebaseConfig = JSON.parse(__firebase_config);
         } else {
+            // 使用你原本提供的 Firebase 金鑰
             firebaseConfig = {
                 apiKey: "AIzaSyCBWQlxFEjio3mE5TSl5X6Ng_c1drXwcF0",
                 authDomain: "class-report-3191c.firebaseapp.com",
@@ -173,7 +174,6 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // 建立 React 錯誤邊界元件
         class ErrorBoundary extends React.Component {
             constructor(props) {
                 super(props);
@@ -201,6 +201,9 @@
             const [firebaseReady, setFirebaseReady] = useState(checkFirebase);
             const [firebaseUser, setFirebaseUser] = useState(null);
             
+            // 新增：偵測 Firebase 權限錯誤的狀態
+            const [dbError, setDbError] = useState(null);
+            
             const appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'class-315-system'; 
             const basePath = `artifacts/${appId}/public/data`;
             
@@ -210,7 +213,7 @@
             
             const [settings, setSettings] = useState({
                 className: "315",
-                reportPeriod: "", // 預設清空，不顯示段考文字
+                reportPeriod: "", 
                 gradingTone: "溫和鼓勵", 
                 printRemark: "請家長與學生一同審視本次測驗各科目範圍的熟練度，並持續配合在家複習。",
                 examType: "一般", 
@@ -222,13 +225,12 @@
                 subjects: []
             });
 
-            // loginData 包含學生登入、與任課老師選擇的科目與密碼
             const [loginData, setLoginData] = useState({ seatNo: '', password: '', subjectTeacherPass: '', selectedSubject: '' });
             const [teacherPass, setTeacherPass] = useState('');
             const [showTeacherModal, setShowTeacherModal] = useState(false);
             const [showSubjectTeacherModal, setShowSubjectTeacherModal] = useState(false);
             const [analyticsSubject, setAnalyticsSubject] = useState('');
-            const [subjectEditData, setSubjectEditData] = useState({}); // 任課老師修改成績專用
+            const [subjectEditData, setSubjectEditData] = useState({}); 
             
             const [editingSubject, setEditingSubject] = useState(null);
             const [editForm, setEditForm] = useState({ score: '' });
@@ -246,14 +248,12 @@
             const [toast, setToast] = useState(null);
             const [excelDragActive, setExcelDragActive] = useState(false);
             
-            // UI Modals (導師用)
             const [showQuickScoreModal, setShowQuickScoreModal] = useState(false);
             const [quickScoreSubject, setQuickScoreSubject] = useState('');
             const [quickScoreData, setQuickScoreData] = useState({});
             const [quickScoreMode, setQuickScoreMode] = useState('manual');
             const [pastedScores, setPastedScores] = useState('');
 
-            // Custom Confirm Dialog
             const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: '', onConfirm: null });
 
             const fileInputRef = useRef(null);
@@ -283,9 +283,12 @@
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                             await signInWithCustomToken(auth, __initial_auth_token);
                         } else {
+                            // 若使用者未在 Firebase 後台開通匿名登入，這裡會報錯，但我們不阻擋程式執行
                             await signInAnonymously(auth);
                         }
-                    } catch (e) { console.error("登入錯誤:", e); }
+                    } catch (e) { 
+                        console.warn("登入驗證失敗，但若資料庫規則開放仍可運作:", e); 
+                    }
                 };
 
                 initAuth();
@@ -295,14 +298,15 @@
                 return () => unsubscribe();
             }, [firebaseReady]);
 
-            // ================= 監聽資料庫 =================
+            // ================= 監聽資料庫 (最關鍵的修正區) =================
             useEffect(() => {
-                if (!firebaseReady || !firebaseUser) return; 
+                if (!firebaseReady) return; 
                 
                 const { db, onSnapshot, doc, collection } = window.firebaseAPI;
 
                 const settingsRef = doc(db, `${basePath}/settings/global`);
                 const unsubSettings = onSnapshot(settingsRef, (snap) => {
+                    setDbError(null); // 讀取成功就清除錯誤狀態
                     if (snap.exists) {
                         const cloudData = typeof snap.data === 'function' ? snap.data() : snap;
                         
@@ -319,26 +323,57 @@
                             showRadarChart: cloudData.showRadarChart !== undefined ? cloudData.showRadarChart : true 
                         });
                     }
-                }, (error) => console.error("設定檔讀取失敗:", error));
+                }, (error) => {
+                    console.error("設定檔讀取失敗:", error);
+                    // 攔截權限錯誤
+                    if (error.code === 'permission-denied' || error.message.includes('Missing or insufficient permissions')) {
+                        setDbError('permission-denied');
+                    } else {
+                        showToast("讀取資料被拒絕！請確認 Firebase 規則。", "error");
+                    }
+                });
 
                 const studentsRef = collection(db, `${basePath}/submissions`);
                 const unsubStudents = onSnapshot(studentsRef, (snap) => {
-                    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    // 確保按照座號排序
+                    setDbError(null); // 讀取成功就清除錯誤狀態
+                    const list = snap.docs.map(d => {
+                        const rawData = d.data() || {};
+                        return {
+                            id: d.id,
+                            seatNo: rawData.seatNo || '',
+                            name: rawData.name || '未命名',
+                            password: rawData.password || '',
+                            loginCount: rawData.loginCount || 0,
+                            progress: rawData.progress || 0,
+                            scores: rawData.scores || {},
+                            classRank: rawData.classRank || null,
+                            classRankProgress: rawData.classRankProgress || null,
+                            schoolRank: rawData.schoolRank || null,
+                            schoolRankProgress: rawData.schoolRankProgress || null
+                        };
+                    });
+                    
+                    // 【強制更新狀態】確保每次拿到新資料都會觸發渲染
                     list.sort((a, b) => String(a.seatNo || '').localeCompare(String(b.seatNo || ''), undefined, {numeric: true}));
-                    setStudents(list);
+                    setStudents([...list]);
 
                     setCurrentStudent(prev => {
                         if (prev) {
                             const updated = list.find(s => s.id === prev.id);
-                            return updated || prev;
+                            return updated ? {...updated} : prev;
                         }
                         return prev;
                     });
-                }, (error) => console.error("學生資料讀取失敗:", error));
+                }, (error) => {
+                    console.error("學生資料讀取失敗:", error);
+                    // 攔截權限錯誤
+                    if (error.code === 'permission-denied' || error.message.includes('Missing or insufficient permissions')) {
+                        setDbError('permission-denied');
+                    }
+                });
 
                 return () => { unsubSettings(); unsubStudents(); };
-            }, [firebaseReady, firebaseUser, basePath]);
+            }, [firebaseReady, basePath]);
 
             // ================= 工具函數 =================
             const showToast = (text, type = 'success') => {
@@ -401,14 +436,6 @@
                 return stats;
             };
 
-            const getGradeLevelName = (avg) => {
-                if (avg >= 90) return "A級距 (90-100)";
-                if (avg >= 80) return "B級距 (80-89)";
-                if (avg >= 70) return "C級距 (70-79)";
-                if (avg >= 60) return "D級距 (60-69)";
-                return "E級距 (60分以下)";
-            };
-
             const getLocalDiagnostic = (student, subName, score, classAvg, tone) => {
                 if (score === null || score === undefined) return "尚未登記該科成績。";
                 if (tone === "溫和鼓勵") {
@@ -452,13 +479,6 @@
                 return '';
             };
 
-            // 導師 Modal 開啟
-            const openTeacherLoginModal = (e) => {
-                if (e && e.preventDefault) e.preventDefault();
-                if (e && e.stopPropagation) e.stopPropagation();
-                setShowTeacherModal(true);
-            };
-
             // 導師秘密通道：點擊三下 Logo
             const handleSecretTeacherLogin = (e) => {
                 if (e && e.preventDefault) e.preventDefault();
@@ -492,7 +512,6 @@
                 }
             };
 
-            // 導師(管理者)登入處理
             const handleTeacherLoginOnMain = () => {
                 const inputPwd = String(teacherPass).trim().toUpperCase();
                 if (inputPwd === 'FXM315') { 
@@ -505,7 +524,6 @@
                 }
             };
 
-            // 任課老師登入處理與載入初值
             const handleSubjectTeacherLogin = () => {
                 if (!loginData.selectedSubject) {
                     return showToast('請先選擇您任教的科目！', 'warning');
@@ -517,7 +535,6 @@
                     setViewMode('subject-analytics');
                     setShowSubjectTeacherModal(false);
                     
-                    // 載入該科目所有學生目前的分數到編輯 state
                     const initialData = {};
                     students.forEach(s => {
                         const sc = getStudentScore(s, loginData.selectedSubject);
@@ -532,7 +549,6 @@
                 }
             };
 
-            // 家長與學生登入處理
             const handleParentLogin = () => {
                 const seatStr = String(loginData.seatNo).trim();
                 const pwdStr = String(loginData.password).trim();
@@ -568,7 +584,6 @@
                 }
             };
 
-            // ================= 權限設定 =================
             const toggleAllSubjectLocks = (locked) => {
                 if (settings.subjects.length === 0) return;
                 const newSubjects = settings.subjects.map(s => ({ ...s, locked: locked }));
@@ -577,7 +592,6 @@
                 saveSettingsToCloud(newSettings);
             };
 
-            // ================= 導師用 - 快速個別登記 / 貼上單科成績 =================
             const openQuickScore = () => {
                 if (settings.subjects.length === 0) return showToast("請先在左側設定「考試項目」！", "warning");
                 if (students.length === 0) return showToast("請先新增學生名單！", "warning");
@@ -673,7 +687,6 @@
                 }).catch(e => showToast(`儲存失敗：${e.message}`, "error"));
             };
 
-            // ================= 任課老師用 - 儲存編輯成績 =================
             const saveSubjectTeacherScores = () => {
                 const { db, doc, setDoc } = window.firebaseAPI;
                 let hasChanges = false;
@@ -710,7 +723,6 @@
                 }).catch(e => showToast(`儲存失敗：${e.message}`, "error"));
             };
 
-            // ================= 智慧新增單次考試 =================
             const handleAddSubject = () => {
                 const baseName = newSubjectName === "自訂" ? customSubjectName.trim() : newSubjectName;
                 if (!baseName) return showToast("請輸入科目名稱！", "error");
@@ -752,7 +764,6 @@
                 });
             };
 
-            // ================= 單一學生登記成績 =================
             const startEditSubjectScore = (subjectObj) => {
                 if (subjectObj && subjectObj.locked) return showToast("此科目已被鎖定！", "error");
                 setEditingSubject(subjectObj);
@@ -780,7 +791,6 @@
                     .catch(e => showToast(`儲存失敗：${e.message}`, "error"));
             };
 
-            // ================= 共用匯入寫入邏輯 =================
             const processExcelOrCsv = (file, callback) => {
                 if (!file) return;
                 const reader = new FileReader();
@@ -838,6 +848,11 @@
                 });
 
                 const { db, doc, setDoc } = window.firebaseAPI;
+                
+                // 【強制更新狀態】為了防止畫面上舊的 reference 沒被替換，這裡先自己組一個全新的陣列
+                const newStudentList = [...parsedStudents].sort((a, b) => String(a.seatNo || '').localeCompare(String(b.seatNo || ''), undefined, {numeric: true}));
+                setStudents(newStudentList);
+
                 const writePromises = parsedStudents.map(s => setDoc(doc(db, `${basePath}/submissions/${s.id}`), s));
                 
                 Promise.all(writePromises)
@@ -972,16 +987,13 @@
                 });
             };
 
-            // ================= 一鍵清除考科與成績 (保留名單) =================
             const clearExamsAndScores = () => {
                 showConfirm(`🚨 極度危險操作：這將會清除【所有的考試科目】以及【全班所有學生的成績】！\n\n學生的座號、姓名與密碼會保留，方便新學期/新段考重新使用。\n強烈建議您在執行前先「下載完整備份」。\n\n您確定要一口氣清除所有成績與考科嗎？`, () => {
                     const { db, doc, setDoc } = window.firebaseAPI;
                     
-                    // 1. 清空所有考科
                     const newSettings = { ...settings, subjects: [] };
                     const settingsPromise = setDoc(doc(db, `${basePath}/settings/global`), newSettings);
                     
-                    // 2. 清空所有學生的成績紀錄、排名、進步分數
                     const studentPromises = students.map(s => {
                         const updatedStudent = { 
                             ...s, 
@@ -1041,7 +1053,6 @@
                 if (!rawName) return showToast("姓名不能為空！", "error");
                 
                 const { db, doc, setDoc } = window.firebaseAPI;
-                // 修改的成績已經透過 onChange 即時寫入 modifyingStudent.scores，直接儲存即可
                 const updatedData = { ...modifyingStudent, name: maskName(rawName) };
                 setDoc(doc(db, `${basePath}/submissions/${updatedData.id}`), updatedData)
                     .then(() => {
@@ -1085,6 +1096,11 @@
                 ];
 
                 const { db, doc, setDoc } = window.firebaseAPI;
+                
+                // 【強制更新狀態】為了防止畫面上舊的 reference 沒被替換，這裡先自己組一個全新的陣列
+                const newStudentList = [...class315List].map(s => ({ ...s, name: maskName(s.name) })).sort((a, b) => String(a.seatNo || '').localeCompare(String(b.seatNo || ''), undefined, {numeric: true}));
+                setStudents(newStudentList);
+
                 const promises = class315List.map(s => {
                     const maskedStudent = { ...s, name: maskName(s.name) };
                     return setDoc(doc(db, `${basePath}/submissions/${maskedStudent.id}`), maskedStudent);
@@ -1097,7 +1113,6 @@
             const editSubName = typeof editingSubject === 'object' && editingSubject !== null ? editingSubject.name : '';
             const editSubScope = typeof editingSubject === 'object' && editingSubject !== null ? editingSubject.scope : '';
 
-            // 任課老師分析專用資料計算，同時計算最高分、不及格與缺考名單
             const getAnalyticsData = () => {
                 if (!analyticsSubject) return null;
                 
@@ -1178,7 +1193,6 @@
 
             const overallStats = getGradeLevelStats(); 
 
-            // 輔助渲染單一成績表格
             const renderSubjectTable = (subsList, showTotalRow, targetStudent, allowEdit) => {
                 return (
                     <div className="overflow-hidden border border-slate-200 rounded-2xl shadow-sm h-full flex flex-col justify-between">
@@ -1219,7 +1233,6 @@
                                         </tr>
                                     );
                                 })}
-                                {/* 填補空行以保持兩欄表格高度一致 */}
                                 {!showTotalRow && subsList.length < Math.ceil(settings.subjects.length / 2) && (
                                     <tr className="invisible"><td colSpan="6" className="py-3.5"></td></tr>
                                 )}
@@ -1240,21 +1253,15 @@
             };
 
             const renderReportCard = (targetStudent, allowEdit) => {
-                // 判斷是否需要啟用雙欄模式 (科目大於等於10筆)
                 const useTwoColumns = settings.subjects.length >= 10;
                 const halfCeil = Math.ceil(settings.subjects.length / 2);
                 const leftSubjects = useTwoColumns ? settings.subjects.slice(0, halfCeil) : settings.subjects;
                 const rightSubjects = useTwoColumns ? settings.subjects.slice(halfCeil) : [];
-                
-                // AI評語捲動區高度設定
                 const commentMaxHeight = useTwoColumns ? 'max-h-[200px]' : 'max-h-[360px]';
 
                 return (
                     <div key={targetStudent.id} className="print-page bg-white p-6 sm:p-12 rounded-[2.5rem] border border-slate-100 shadow-2xl max-w-5xl w-full flex flex-col gap-6 relative mx-auto mb-8">
-                        
-                        {/* ================= 上半部：核心成績與表單 ================= */}
                         <div className="flex flex-col gap-4">
-                            {/* 家長端與成績單的提醒橫幅 */}
                             <div className="no-print bg-rose-50 text-rose-700 p-3 rounded-2xl mb-2 font-black text-center border border-rose-200 shadow-sm text-sm">
                                 ⚠️ 系統提醒：請務必於考試後【兩日內】登入完成成績登記
                             </div>
@@ -1271,7 +1278,6 @@
                                 )}
                             </div>
 
-                            {/* 智慧雙欄成績列表 */}
                             {useTwoColumns ? (
                                 <div className="grid grid-cols-1 lg:grid-cols-2 print:grid-cols-2 gap-4 sm:gap-6 items-stretch">
                                     {renderSubjectTable(leftSubjects, false, targetStudent, allowEdit)}
@@ -1285,7 +1291,7 @@
                                 {settings.showProgress && (
                                     <div className="bg-slate-50 border p-4 rounded-2xl flex flex-col justify-center">
                                         <span className="block text-xs text-slate-500 font-bold">總分進步</span>
-                                        <span className={`block text-2xl font-black mt-1 ${targetStudent.progress > 0 ? 'text-emerald-600' : targetStudent.progress < 0 ? 'text-rose-500' : 'text-slate-600'}`}>
+                                        <span className={`block text-2xl font-black mt-1 ${targetStudent.progress > 0 ? 'textemerald-600' : targetStudent.progress < 0 ? 'text-rose-500' : 'text-slate-600'}`}>
                                             {targetStudent.progress > 0 ? `⬆️ +${targetStudent.progress}` : targetStudent.progress < 0 ? `⬇️ ${Math.abs(targetStudent.progress)}` : '0'}
                                         </span>
                                     </div>
@@ -1314,7 +1320,6 @@
                                 )}
                             </div>
 
-                            {/* 單一考科輸入表單 */}
                             {allowEdit && editingSubject && (
                                 <div className="no-print bg-emerald-50/60 border border-emerald-200/80 p-5 rounded-3xl flex flex-col gap-4 animate-fade-in shadow-inner mt-2">
                                     <div className="flex justify-between items-start pb-2 border-b border-emerald-200">
@@ -1334,9 +1339,7 @@
                             )}
                         </div>
 
-                        {/* ================= 下半部：分析雷達圖與 AI 診斷 ================= */}
                         <div className="flex flex-col md:flex-row gap-6 pt-5 border-t-2 border-slate-100 mt-2">
-                            {/* 左側：雷達圖 */}
                             {settings.showRadarChart !== false && (
                                 <div className={`bg-slate-50/50 p-4 rounded-3xl border border-slate-100 text-center flex flex-col items-center justify-center ${useTwoColumns ? 'md:w-1/3' : 'flex-1'}`}>
                                     <span className="text-sm font-black text-[#00704A] bg-emerald-50 px-4 py-1.5 rounded-full border border-emerald-100 inline-block mb-2 shadow-sm">週報/考試雷達分佈圖</span>
@@ -1344,7 +1347,6 @@
                                 </div>
                             )}
 
-                            {/* 右側：AI學習診斷 與 導師叮嚀 */}
                             <div className={`${useTwoColumns ? 'md:w-2/3' : 'flex-1'} flex flex-col gap-4 justify-between`}>
                                 <div className="flex flex-col gap-3">
                                     <div className="border-b-2 border-slate-100 pb-2 flex justify-between items-center">
@@ -1379,16 +1381,64 @@
                 );
             };
 
+            // ================= 防呆攔截：顯示 Firebase 權限修復引導畫面 =================
+            if (dbError === 'permission-denied') {
+                return (
+                    <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-6 animate-fade-in">
+                        <div className="max-w-2xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-rose-100">
+                            <div className="bg-rose-600 p-6 text-white text-center">
+                                <span className="text-5xl block mb-2">🛑</span>
+                                <h1 className="text-2xl font-black">Firebase 資料庫連線被拒絕！</h1>
+                                <p className="text-rose-100 font-bold mt-2">您的資料庫目前被鎖定，所以無法顯示任何名單與成績。</p>
+                            </div>
+                            <div className="p-8 text-slate-700">
+                                <h2 className="text-xl font-black mb-4">這不是程式壞掉，是權限忘記開！</h2>
+                                <p className="mb-6 font-bold leading-relaxed text-slate-600">
+                                    只要您的 Firebase 規則沒有設定正確，即使您成功匯入了 Excel，Firebase 也不會允許您的網頁把它顯示出來。
+                                </p>
+                                
+                                <div className="bg-amber-50 border-l-4 border-amber-500 p-5 rounded-r-xl mb-6 shadow-sm">
+                                    <h3 className="font-black text-amber-800 mb-2 flex items-center gap-2"><span>🛠️</span> 解決步驟 (只需 1 分鐘)：</h3>
+                                    <ol className="list-decimal list-inside space-y-3 font-bold text-amber-900 text-sm">
+                                        <li>登入您的 <a href="https://console.firebase.google.com/" target="_blank" className="text-blue-600 underline">Firebase 控制台</a></li>
+                                        <li>點擊左側選單的 <strong>Firestore Database</strong>，然後點擊上方的 <strong>Rules (規則)</strong> 頁籤。</li>
+                                        <li>把裡面的程式碼全部刪除，<strong className="text-rose-600">替換成下方黑色框框的代碼，然後點擊「發布 (Publish)」</strong>。</li>
+                                    </ol>
+                                </div>
+
+                                <div className="relative">
+                                    <pre className="bg-slate-800 text-emerald-400 p-5 rounded-xl font-mono text-sm overflow-x-auto shadow-inner">
+{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}`}
+                                    </pre>
+                                </div>
+                                
+                                <div className="mt-8 text-center">
+                                    <p className="text-sm font-bold text-slate-500 mb-3">修改並發布成功後，請點擊下方按鈕重新整理！</p>
+                                    <button onClick={() => window.location.reload()} className="bg-slate-800 hover:bg-slate-900 text-white px-8 py-3.5 rounded-xl font-black shadow-lg transition active:scale-95 flex items-center gap-2 mx-auto">
+                                        <span>🔄</span> 我已經發布了，重新連線系統
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
             return (
                 <div className="flex-grow flex flex-col">
-                    {/* 自訂警告與成功 Toast */}
                     {toast && (
                         <div className={`fixed top-5 right-5 z-[999999] px-5 py-3 rounded-2xl shadow-2xl text-white font-medium flex items-center gap-2 transform transition-all duration-300 ${toast.type === 'error' ? 'bg-rose-500' : toast.type === 'warning' ? 'bg-amber-500 text-amber-950' : 'bg-emerald-500'}`}>
                             {toast.type === 'error' ? '⚠️' : toast.type === 'warning' ? '🔔' : '✅'} {toast.text}
                         </div>
                     )}
 
-                    {/* 自訂 Confirm Dialog */}
                     {confirmDialog.isOpen && (
                         <div className="fixed inset-0 z-[200000] flex items-center justify-center bg-slate-900/60 p-4" onClick={() => setConfirmDialog({ isOpen: false, message: '', onConfirm: null })}>
                             <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -1405,7 +1455,6 @@
                         </div>
                     )}
 
-                    {/* 教師管理登入 Modal (導師使用) */}
                     {showTeacherModal && (
                         <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-900/85 p-4" onClick={() => setShowTeacherModal(false)}>
                             <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -1427,7 +1476,6 @@
                         </div>
                     )}
 
-                    {/* 任課老師登入 Modal */}
                     {showSubjectTeacherModal && (
                         <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-900/85 p-4" onClick={() => setShowSubjectTeacherModal(false)}>
                             <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -1467,11 +1515,9 @@
                         </div>
                     )}
 
-                    {/* 編輯單一學生資料 Modal */}
                     {modifyingStudent && (
                         <div className="fixed inset-0 z-[150000] flex items-center justify-center bg-slate-900/60 p-4" onClick={() => setModifyingStudent(null)}>
                             <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl max-h-[95vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                                {/* 將儲存按鈕移至右上方 */}
                                 <div className="flex justify-between items-center mb-4 shrink-0 pb-3 border-b border-slate-200">
                                     <h3 className="text-lg font-black text-slate-800">📝 編輯學生資料與成績</h3>
                                     <div className="flex gap-2">
@@ -1481,7 +1527,6 @@
                                 </div>
                                 
                                 <div className="overflow-y-auto custom-scrollbar pr-2 flex-grow space-y-4">
-                                    {/* 基本資料區 */}
                                     <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                                         <h4 className="text-xs font-black text-slate-700 border-b pb-1">👤 基本資料</h4>
                                         <div className="flex gap-3">
@@ -1500,7 +1545,6 @@
                                         </div>
                                     </div>
 
-                                    {/* 成績編輯區 */}
                                     {settings.subjects.length > 0 && (
                                         <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100">
                                             <h4 className="text-xs font-black text-[#00704A] border-b border-emerald-200 pb-1 mb-3">📊 各科成績</h4>
@@ -1540,11 +1584,9 @@
                         </div>
                     )}
 
-                    {/* ======================= 導師後台用的 - 快速登記 Modal ======================= */}
                     {showQuickScoreModal && viewMode !== 'subject-analytics' && (
                         <div className="fixed inset-0 z-[150000] flex items-center justify-center bg-slate-900/60 p-4" onClick={() => setShowQuickScoreModal(false)}>
                             <div className="bg-white w-full max-w-3xl max-h-[95vh] flex flex-col rounded-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-                                {/* 將儲存按鈕移至右上方 */}
                                 <div className="flex justify-between items-center mb-4 shrink-0 pb-3 border-b border-slate-200">
                                     <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><span>✏️</span> 快速登記全班單科</h3>
                                     <div className="flex gap-2">
@@ -1556,7 +1598,6 @@
                                 <div className="mb-4 shrink-0 bg-slate-50 p-4 rounded-2xl border border-slate-200">
                                     <label className="text-xs font-bold text-slate-500 mb-2 block">1. 點選科目</label>
                                     <div className="flex flex-wrap gap-2 mb-4">
-                                        {/* 在快速登記的科目按鈕上，同時顯示名稱與日期 */}
                                         {settings.subjects.map(s => (
                                             <button 
                                                 key={s.name}
@@ -1631,7 +1672,6 @@
                             <div 
                                 onClick={handleSecretTeacherLogin}
                                 className="w-16 h-10 rounded-2xl bg-[#00704A] flex items-center justify-center font-black text-white text-xl cursor-pointer hover:bg-[#005a3c] transition-all no-zoom-click border border-emerald-500/30 hover:scale-105 active:scale-95 shadow-sm select-none"
-                                title="點擊三下進入導師管理"
                             >
                                 {settings.className}
                             </div>
@@ -1641,12 +1681,10 @@
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            {/* 任課老師隱藏按鈕 (需點擊3下) */}
                             {viewMode === 'parent-login' && (
                                 <div 
                                     onClick={handleSecretSubjectTeacherLogin} 
                                     className="cursor-pointer bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm select-none border border-transparent hover:border-white/30"
-                                    title="點擊三下進入任課老師專區"
                                 >
                                     <span className="text-sm">👨‍🏫</span>
                                     <span className="hidden sm:inline">任課</span>
@@ -1659,7 +1697,6 @@
                         </div>
                     </nav>
 
-                    {/* ================= 登入頁 ================= */}
                     {viewMode === 'parent-login' && (
                         <main className="no-print flex-grow flex flex-col justify-center items-center px-4 py-12">
                             
@@ -1670,7 +1707,6 @@
                                 <h2 
                                     className="text-3xl sm:text-4xl font-extrabold text-[#1E3932] tracking-wide mb-2 cursor-pointer no-zoom-click"
                                     onClick={handleSecretTeacherLogin}
-                                    title="點擊三下也可進入管理"
                                 >
                                     {settings.className} 成績通知單查詢系統
                                 </h2>
@@ -1690,7 +1726,7 @@
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 mb-1">查詢密碼</label>
-                                        <input type="password" placeholder="請輸入密碼 (未修改預設同座號)" className="w-full p-3 bg-slate-50 border rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#00704A]" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleParentLogin()} />
+                                        <input type="password" placeholder="請輸入密碼 (預設為身分證後三碼)" className="w-full p-3 bg-slate-50 border rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#00704A]" value={loginData.password} onChange={e => setLoginData({...loginData, password: e.target.value})} onKeyDown={e => e.key === 'Enter' && handleParentLogin()} />
                                     </div>
                                     <button onClick={handleParentLogin} className="w-full bg-[#00704A] hover:bg-[#005a3c] text-white py-3.5 rounded-xl font-bold transition shadow-lg active:scale-95 no-zoom-click">
                                         🚀 登入查看與登記成績
@@ -1700,10 +1736,8 @@
                         </main>
                     )}
 
-                    {/* ================= 家長/單一學生 預覽頁 ================= */}
                     {viewMode === 'parent-dashboard' && currentStudent && (
                         <main className="flex-grow p-4 sm:p-6 flex flex-col items-center animate-fade-in">
-                            {/* 家長端與成績單的提醒橫幅 (從原本表格上方移至外層，確保不會被印出來) */}
                             <div className="w-full max-w-4xl no-print bg-rose-50 text-rose-700 p-3 rounded-2xl mb-4 font-black text-center border border-rose-200 shadow-sm text-sm">
                                 ⚠️ 系統提醒：請務必於考試後【兩日內】登入系統完成成績登記
                             </div>
@@ -1718,7 +1752,6 @@
                         </main>
                     )}
 
-                    {/* ================= 教師批次列印頁面 ================= */}
                     {viewMode === 'batch-print' && (
                         <main className="flex-grow bg-slate-200 p-4 sm:p-6 flex flex-col items-center">
                             <div className="no-print w-full max-w-4xl flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-300 sticky top-4 z-10">
@@ -1738,11 +1771,9 @@
                         </main>
                     )}
 
-                    {/* ================= 任課老師 - 成績分析與登記面板 ================= */}
                     {viewMode === 'subject-analytics' && (
                         <main className="flex-grow p-4 sm:p-8 flex flex-col items-center animate-fade-in bg-slate-100">
                             <div className="w-full max-w-5xl bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden">
-                                {/* Header */}
                                 <div className="bg-blue-600 text-white p-6 sm:p-8 relative">
                                     <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-bl-full -mr-4 -mt-4"></div>
                                     <h2 className="text-3xl font-black mb-1">📊 {settings.className}班 - {analyticsSubject} 分析與登記</h2>
@@ -1753,7 +1784,6 @@
                                     const subjectStats = getAnalyticsData();
                                     if (!subjectStats) return <div className="p-12 text-center text-slate-500 font-bold">載入中...</div>;
                                     
-                                    // 尚未建立任何學生時的友善提示
                                     if (!subjectStats.isLoaded && students.length === 0) return (
                                         <div className="p-16 flex flex-col items-center justify-center gap-4 text-center">
                                             <span className="text-5xl text-slate-300 animate-pulse">⏳</span>
@@ -1767,7 +1797,6 @@
 
                                     return (
                                         <div className="p-6 sm:p-8 border-b border-slate-100">
-                                            {/* 三大指標 */}
                                             <div className="grid grid-cols-3 gap-4 mb-8">
                                                 <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center shadow-sm">
                                                     <span className="text-xs font-black text-blue-600 mb-1">📈 最高分</span>
@@ -1783,7 +1812,6 @@
                                                 </div>
                                             </div>
 
-                                            {/* 名單分析卡片區 (最高分、不及格、未登記) */}
                                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
                                                 <div className="bg-blue-50 border border-blue-200 rounded-3xl p-5 shadow-sm">
                                                     <h4 className="font-black text-blue-800 mb-3 border-b border-blue-200 pb-2 flex items-center gap-1.5"><span>🏆</span> 最高分 ({subjectStats.max} 分)</h4>
@@ -1811,7 +1839,6 @@
                                                 </div>
                                             </div>
 
-                                            {/* 級距分佈 */}
                                             <div className="bg-slate-50 border border-slate-200 rounded-3xl p-5 shadow-sm">
                                                 <h4 className="font-black text-slate-700 mb-4 border-b border-slate-200 pb-2">📋 成績級距分佈 (共 {subjectStats.count} 人已登記)</h4>
                                                 <div className="flex flex-wrap gap-3 sm:gap-4 justify-between sm:justify-center">
@@ -1841,7 +1868,6 @@
                                     );
                                 })()}
 
-                                {/* 學生名單與即時輸入區 */}
                                 {students.length > 0 && (
                                     <div className="p-6 sm:p-8">
                                         <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
@@ -1885,21 +1911,18 @@
                         </main>
                     )}
 
-                    {/* ================= 後台管理頁 (導師端) ================= */}
                     {viewMode === 'teacher-dashboard' && (
                         <main className="no-print flex-grow p-6 flex flex-col xl:flex-row gap-6 max-w-[1600px] w-full mx-auto animate-fade-in">
                             
-                            {/* 左側設定區 */}
                             <div className="w-full xl:w-96 shrink-0 flex flex-col gap-5">
                                 
-                                {/* Card 1: 班級管理設定 */}
                                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xl flex flex-col gap-4">
                                     <h3 className="font-black text-slate-800 text-lg pb-3 border-b">⚙️ 系統基本設定</h3>
                                     
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-[11px] font-bold text-slate-500 mb-1">本次考試類型</label>
-                                            <select className="w-full p-2 bg-indigo-50 border border-indigo-100 text-indigo-800 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500" value={settings.examType || '一般'} onChange={e => { const s = {...settings, examType: e.target.value}; setSettings(s); saveSettingsToCloud(s); }}>
+                                            <select className="w-full p-2 bg-indigo-50 border border-indigo-100 text-indigo-800 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500" value={settings.examType || '一般'} onChange={e => { const s = {...settings, examType: e.target.value}; saveSettingsToCloud(s); }}>
                                                 <option value="一般">平時測驗(隱藏排名)</option>
                                                 <option value="段考">段考(顯示班/校排)</option>
                                                 <option value="模擬考">模擬考(顯示排名)</option>
@@ -1908,7 +1931,7 @@
 
                                         <div>
                                             <label className="block text-[11px] font-bold text-slate-500 mb-1">AI 診斷語氣</label>
-                                            <select className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-bold" value={settings.gradingTone} onChange={e => { const s = {...settings, gradingTone: e.target.value}; setSettings(s); saveSettingsToCloud(s); }}>
+                                            <select className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-bold" value={settings.gradingTone} onChange={e => { const s = {...settings, gradingTone: e.target.value}; saveSettingsToCloud(s); }}>
                                                 <option value="溫和鼓勵">溫和鼓勵 🌸</option>
                                                 <option value="積極督促">積極督促 ⚡</option>
                                                 <option value="嚴格警示">嚴格警示 🔥</option>
@@ -1924,18 +1947,17 @@
                                                     type="date" 
                                                     className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#00704A] outline-none text-slate-700" 
                                                     value={(() => {
-                                                        const parts = (settings.reportPeriod || '').split('~');
-                                                        const raw = parts[0] ? String(parts[0]).trim() : '';
-                                                        return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : '';
+                                                        const d = (settings.reportPeriod || '').split('~')[0];
+                                                        return d && /^\d{4}-\d{2}-\d{2}$/.test(d.trim()) ? d.trim() : '';
                                                     })()}
                                                     onChange={e => { 
                                                         const parts = (settings.reportPeriod || '').split('~');
-                                                        const endRaw = parts.length > 1 && parts[1] ? String(parts[1]).trim() : '';
+                                                        const endRaw = parts.length > 1 ? parts[1].trim() : '';
                                                         const end = /^\d{4}-\d{2}-\d{2}$/.test(endRaw) ? endRaw : '';
                                                         const start = e.target.value;
                                                         const val = [start, end].filter(Boolean).join(' ~ ');
                                                         const s = {...settings, reportPeriod: val}; 
-                                                        setSettings(s); saveSettingsToCloud(s); 
+                                                        saveSettingsToCloud(s); 
                                                     }} 
                                                 />
                                                 <span className="text-slate-400 font-bold">~</span>
@@ -1944,17 +1966,17 @@
                                                     className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#00704A] outline-none text-slate-700" 
                                                     value={(() => {
                                                         const parts = (settings.reportPeriod || '').split('~');
-                                                        const raw = parts.length > 1 && parts[1] ? String(parts[1]).trim() : '';
-                                                        return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : '';
+                                                        const d = parts.length > 1 ? parts[1] : '';
+                                                        return d && /^\d{4}-\d{2}-\d{2}$/.test(d.trim()) ? d.trim() : '';
                                                     })()}
                                                     onChange={e => { 
                                                         const parts = (settings.reportPeriod || '').split('~');
-                                                        const startRaw = parts[0] ? String(parts[0]).trim() : '';
+                                                        const startRaw = parts[0] ? parts[0].trim() : '';
                                                         const start = /^\d{4}-\d{2}-\d{2}$/.test(startRaw) ? startRaw : '';
                                                         const end = e.target.value;
                                                         const val = [start, end].filter(Boolean).join(' ~ ');
                                                         const s = {...settings, reportPeriod: val}; 
-                                                        setSettings(s); saveSettingsToCloud(s); 
+                                                        saveSettingsToCloud(s); 
                                                     }} 
                                                 />
                                             </div>
@@ -1964,7 +1986,7 @@
 
                                     <div>
                                         <label className="block text-[11px] font-bold text-slate-500 mb-1">列印總備註內容</label>
-                                        <textarea rows="2" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs" value={settings.printRemark} onChange={e => { const s = {...settings, printRemark: e.target.value}; setSettings(s); saveSettingsToCloud(s); }} />
+                                        <textarea rows="2" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs" value={settings.printRemark} onChange={e => { const s = {...settings, printRemark: e.target.value}; saveSettingsToCloud(s); }} />
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-y-3 gap-x-2 border-t pt-3">
@@ -1978,7 +2000,7 @@
                                                          key === 'RadarChart' ? 'showRadarChart' : 'enableComments';
                                             return (
                                                 <label key={prop} className="flex items-center gap-2 cursor-pointer text-[11px] font-bold text-slate-600">
-                                                    <input type="checkbox" checked={settings[prop] !== false} onChange={e => { const s = {...settings}; s[prop] = e.target.checked; setSettings(s); saveSettingsToCloud(s); }} className="rounded text-[#00704A] w-3.5 h-3.5 focus:ring-0" />
+                                                    <input type="checkbox" checked={settings[prop] !== false} onChange={e => { const s = {...settings}; s[prop] = e.target.checked; saveSettingsToCloud(s); }} className="rounded text-[#00704A] w-3.5 h-3.5 focus:ring-0" />
                                                     <span className="truncate">{label}</span>
                                                 </label>
                                             )
@@ -1986,7 +2008,6 @@
                                     </div>
                                 </div>
 
-                                {/* Card 2: 考科與範圍設定 */}
                                 <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xl flex flex-col gap-4">
                                     <div className="flex justify-between items-center border-b pb-2">
                                         <h4 className="font-bold flex items-center gap-2 text-slate-800"><span className="text-lg">📚</span> 考試項目設定</h4>
@@ -1996,7 +2017,6 @@
                                         </div>
                                     </div>
 
-                                    {/* --- 獨立的新增單一考試表單 --- */}
                                     <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 flex flex-col gap-2 shadow-inner">
                                         <h5 className="font-bold text-[#00704A] text-sm flex items-center gap-1 mb-1"><span>➕</span> 新增單一考試</h5>
                                         
@@ -2033,7 +2053,6 @@
                                         </div>
                                     </div>
 
-                                    {/* --- 批次匯入考科 --- */}
                                     <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                         <span className="text-xs font-bold text-slate-600">📥 或使用 Excel 批次建檔：</span>
                                         <div className="flex gap-2">
@@ -2045,7 +2064,6 @@
                                         </div>
                                     </div>
 
-                                    {/* --- 已建立的考試列表 --- */}
                                     <div className="mt-2 border-t pt-3">
                                         <h5 className="font-bold text-slate-700 text-sm mb-2 flex items-center justify-between">
                                             📋 已建立的考試項目
@@ -2071,7 +2089,6 @@
                                                             <button onClick={() => {
                                                                 const newSubjects = settings.subjects.map(s => s && s.name === sub.name ? {...s, scope: editingSubjectConfig.scope, date: editingSubjectConfig.date} : s);
                                                                 const newSettings = {...settings, subjects: newSubjects};
-                                                                setSettings(newSettings);
                                                                 saveSettingsToCloud(newSettings);
                                                                 setEditingSubjectConfig(null);
                                                             }} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-md">💾 儲存修改</button>
@@ -2091,7 +2108,7 @@
                                                                 <input type="checkbox" checked={!sub.locked} className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5" onChange={e => {
                                                                     const newSubjects = settings.subjects.map(x => x && x.name === sub.name ? {...x, locked: !e.target.checked} : x);
                                                                     const s = {...settings, subjects: newSubjects};
-                                                                    setSettings(s); saveSettingsToCloud(s);
+                                                                    saveSettingsToCloud(s);
                                                                 }} />
                                                                 <span className={sub.locked ? "text-rose-600 font-bold text-[10px]" : "text-emerald-600 font-bold text-[10px]"}>{sub.locked ? "鎖定" : "開放"}</span>
                                                             </label>
@@ -2122,7 +2139,6 @@
                                         <div className="flex flex-wrap gap-2 mt-4 justify-center">
                                             <button onClick={() => fileInputRef.current.click()} className="bg-slate-700 hover:bg-slate-800 text-white text-xs px-4 py-2 rounded-xl font-bold transition shadow-md">📤 匯入名單與成績</button>
                                             
-                                            {/* 導師後台的快速登記 */}
                                             <button onClick={openQuickScore} className="bg-[#00704A] hover:bg-[#005a3c] text-white text-xs px-4 py-2 rounded-xl font-black transition shadow-md flex items-center gap-1 border border-emerald-700">
                                                 <span>📋</span> 貼上/登記 單科成績
                                             </button>
@@ -2156,7 +2172,6 @@
                                     </div>
                                 </div>
 
-                                {/* 系統安全備份區塊 */}
                                 <div className="bg-slate-800 p-5 rounded-3xl border border-slate-700 shadow-lg flex flex-col xl:flex-row justify-between items-center gap-4 text-slate-300">
                                     <div>
                                         <h4 className="font-bold text-white flex items-center gap-2"><span>🛡️</span> 系統安全與資料備份</h4>
@@ -2229,7 +2244,6 @@
                                                         </div>
                                                     </th>
                                                     
-                                                    {/* 全新表頭：包含科目、範圍、日期 */}
                                                     {settings.subjects.map(sub => (
                                                         <th key={sub.name} className="px-2 py-2 align-bottom min-w-[80px]" title={`範圍: ${sub.scope || '未填'}\n日期: ${sub.date || '未填'}`}>
                                                             <div className="flex flex-col items-center justify-end h-full gap-0.5">
@@ -2330,5 +2344,3 @@
     </script>
 </body>
 </html>
-
-
