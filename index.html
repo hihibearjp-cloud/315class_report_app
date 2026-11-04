@@ -18,32 +18,26 @@
       canvas.height = 512;
       var ctx = canvas.getContext('2d');
       
-      // 1. 繪製淺色漸層背景 (解決深色看不清的問題，改為明亮清爽風格)
+      // 1. 繪製深紫羅蘭色漸層背景 (iOS 會自動裁切圓角，不需畫邊框)
       var gradient = ctx.createLinearGradient(0, 0, 0, 512);
-      gradient.addColorStop(0, '#FFFFFF'); // 上方純白
-      gradient.addColorStop(1, '#E2D4FF'); // 下方淺紫
+      gradient.addColorStop(0, '#9B59B6'); // 上方亮紫
+      gradient.addColorStop(1, '#4A235A'); // 下方深紫
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, 512, 512);
       
-      // 2. 繪製邊框增加 App 質感
-      ctx.strokeStyle = '#D9B3FF';
-      ctx.lineWidth = 24;
-      ctx.strokeRect(12, 12, 488, 488);
-      
-      // 3. 畫上圖案與文字 
-      // ⚠️ 注意：iOS Canvas 中如果對 Emoji 加陰影 (shadow) 會變成全黑方塊，因此這裡絕不加陰影
+      // 2. 畫上圖案 
+      // ⚠️ 避開 iOS Safari 的 textBaseline 渲染 Bug，手動計算 Y 座標
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
       
-      // 畫鬧鐘與書本 Emoji
-      ctx.font = '150px "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
-      ctx.fillText('⏰', 256, 150);
-      ctx.fillText('📖', 256, 300);
+      // 畫鬧鐘與書本 Emoji (使用最基礎的字體設定，讓系統自動抓原生 Emoji)
+      ctx.font = '140px Arial, sans-serif';
+      ctx.fillText('⏰', 256, 180);
+      ctx.fillText('📖', 256, 350);
 
-      // 畫上標題文字
-      ctx.font = 'bold 60px "PingFang TC", "Microsoft JhengHei", sans-serif';
-      ctx.fillStyle = '#732d91'; // 深紫色文字確保對比度
-      ctx.fillText('打卡聯絡簿', 256, 440);
+      // 3. 畫上標題文字
+      ctx.font = 'bold 56px "PingFang TC", "Microsoft JhengHei", sans-serif';
+      ctx.fillStyle = '#FFFFFF'; // 白色文字確保對比度
+      ctx.fillText('打卡聯絡簿', 256, 460);
       
       // 4. 轉換為 iOS 支援的 PNG 格式 Data URL
       var dataURL = canvas.toDataURL('image/png');
