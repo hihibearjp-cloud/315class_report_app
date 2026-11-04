@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>315班 上學打卡鐘</title>
+  <title>班級上學打卡鐘</title>
   
   <!-- iOS PWA Meta Tags & Apple Touch Icon -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="315打卡鐘">
-  <link rel="apple-touch-icon" href="https://ui-avatars.com/api/?name=315&background=9B59B6&color=fff&size=512">
-  <link rel="shortcut icon" href="https://ui-avatars.com/api/?name=315&background=9B59B6&color=fff&size=512">
+  <meta name="apple-mobile-web-app-title" content="打卡聯絡簿">
+  <link rel="apple-touch-icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="%239B59B6"/><text x="256" y="270" font-size="280" text-anchor="middle" dominant-baseline="central">⏰</text></svg>'>
+  <link rel="shortcut icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="%239B59B6"/><text x="256" y="270" font-size="280" text-anchor="middle" dominant-baseline="central">⏰</text></svg>'>
 
   <!-- 引入 Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -375,7 +375,7 @@
           const url = URL.createObjectURL(blob);
           const link = document.createElement("a");
           link.setAttribute("href", url);
-          link.setAttribute("download", `315班_出缺席總表_${selectedDate}.csv`);
+          link.setAttribute("download", `班級出缺席總表_${selectedDate}.csv`);
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
@@ -511,7 +511,7 @@
             <header className="bg-gradient-to-r from-[#9B59B6] to-[#732d91] p-4 sm:p-6 shadow-md rounded-b-[36px]">
               <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex justify-between items-center w-full md:w-auto gap-4">
-                  <h1 className="text-2xl sm:text-3xl font-black text-white tracking-wide">315班 上學打卡鐘</h1>
+                  <h1 className="text-2xl sm:text-3xl font-black text-white tracking-wide">班級上學打卡鐘</h1>
                   <div className="flex items-center bg-white/20 px-3 py-1.5 rounded-full">
                      <div className="w-2.5 h-2.5 rounded-full bg-[#6EE39A] shadow-[0_0_8px_#6EE39A] animate-pulse mr-2"></div>
                      <span className="text-xs font-bold text-white tracking-wider">雲端同步</span>
@@ -1302,7 +1302,7 @@
                         const activeTags = selectedStudent.activeTags || [];
                         const tagNames = activeTags.map(tid => customTags.find(t => t.id === tid)?.name).filter(Boolean);
                         const timeStr = selectedStudent.checkTime || "未知時間";
-                        let msg = `【315班級通知】\n親愛的家長您好：\n跟您報告，貴子弟 ${selectedStudent.id}號 ${selectedStudent.name} `;
+                        let msg = `【班級通知】\n親愛的家長您好：\n跟您報告，貴子弟 ${selectedStudent.id}號 ${selectedStudent.name} `;
                         
                         if (tagNames.includes('缺席')) {
                             msg += `於 ${selectedDate} 目前尚未抵達教室 (缺席)。\n\n為確保孩子安全，請家長確認孩子狀況，並與導師聯繫，感謝您的配合！`;
