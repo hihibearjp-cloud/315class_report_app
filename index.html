@@ -9,8 +9,42 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="打卡聯絡簿">
-  <link rel="apple-touch-icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="%239B59B6"/><text x="256" y="270" font-size="280" text-anchor="middle" dominant-baseline="central">⏰</text></svg>'>
-  <link rel="shortcut icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="%239B59B6"/><text x="256" y="270" font-size="280" text-anchor="middle" dominant-baseline="central">⏰</text></svg>'>
+  
+  <!-- 動態生成 iOS 完美支援的 PNG 圖示 (鬧鐘+聯絡簿) -->
+  <script>
+    (function() {
+      var canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      var ctx = canvas.getContext('2d');
+      
+      // 1. 繪製紫色漸層背景
+      var gradient = ctx.createLinearGradient(0, 0, 0, 512);
+      gradient.addColorStop(0, '#9B59B6'); // 淺紫
+      gradient.addColorStop(1, '#732d91'); // 深紫
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 512, 512);
+      
+      // 2. 加上陰影提升質感
+      ctx.shadowColor = 'rgba(0,0,0,0.4)';
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetY = 10;
+      
+      // 3. 畫上 Emoji (鬧鐘 + 書本)
+      ctx.font = '220px "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⏰', 256, 170); // 上方放鬧鐘
+      ctx.fillText('📖', 256, 380); // 下方放聯絡簿
+      
+      // 4. 轉換為 iOS 支援的 PNG 格式 Data URL
+      var dataURL = canvas.toDataURL('image/png');
+      
+      // 5. 寫入網頁設定中
+      document.write('<link rel="apple-touch-icon" href="' + dataURL + '">');
+      document.write('<link rel="shortcut icon" href="' + dataURL + '">');
+    })();
+  </script>
 
   <!-- 引入 Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
